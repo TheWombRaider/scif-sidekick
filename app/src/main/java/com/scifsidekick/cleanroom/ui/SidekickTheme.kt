@@ -163,8 +163,8 @@ class AppearancePreferences(
         }
     }
 
-    /** Whether the Rainbow Road easter egg has been unlocked (tapping "Appearance" seven times
-     *  on the settings screen) and should therefore appear as a selectable accent at all. */
+    /** Whether the Rainbow Road easter egg has been unlocked (tapping the version card seven times
+     *  on the About screen) and should therefore appear as a selectable accent at all. */
     fun rainbowRoadUnlocked(): Boolean = preferences.getBoolean(KEY_RAINBOW_UNLOCKED, false)
 
     fun unlockRainbowRoad() {

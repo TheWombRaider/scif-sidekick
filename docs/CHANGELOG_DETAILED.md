@@ -2,6 +2,11 @@
 
 The full release notes, with the reasoning behind each change. The short version is [CHANGELOG.md](../CHANGELOG.md).
 
+## 1.26.0
+- **Owner address gets all four commands** on first Gmail connect (Compose, Enable, Disable, Status), seeded once per install. Installs that already seeded a Status-only owner are not changed.
+- **Commands screen** in the menu, built from one `CommandHelp` table that unit tests check against the real subject parser.
+- **Send test receipt** button in Settings. It queues a receipt through `enqueueSystemEmail` and `ReceiptDrainWorker`, the path real command receipts use.
+
 ## 1.25.0
 
 - **Widget toggle moved out of the exported receiver.** `StatusWidgetProvider` has to be exported (the launcher delivers updates to it), and its on/off action could therefore be sent by any app. The action now lives in `WidgetToggleReceiver`, which is not exported; a unit test parses the manifest and fails if the exported set changes.

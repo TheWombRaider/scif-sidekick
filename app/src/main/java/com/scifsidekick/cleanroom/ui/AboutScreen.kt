@@ -1,5 +1,6 @@
 package com.scifsidekick.cleanroom.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -14,6 +15,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,6 +37,11 @@ data class ChangelogEntry(
 object Changelog {
     val entries =
         listOf(
+            ChangelogEntry(
+                "1.26.0",
+                "New Commands screen listing every email command, a \"Send test receipt\" button in Settings, and the " +
+                    "Gmail account you connect is now authorized for Compose, Enable, Disable and Status from the start.",
+            ),
             ChangelogEntry(
                 "1.25.0",
                 "Security hardening: the widget toggle can't be triggered by other apps, premium-rate numbers are " +
@@ -93,6 +103,37 @@ object Changelog {
         )
 }
 
+/**
+ * Tap counting for the Rainbow Road unlock, the same gag Android uses for Developer options: tap
+ * the version card [REQUIRED] times. The first few taps say nothing; the last few count down.
+ */
+object RainbowRoadTaps {
+    const val REQUIRED = 7
+    const val COUNTDOWN_FROM = 3
+
+    sealed interface Result {
+        /** Silent progress. */
+        data object Quiet : Result
+
+        /** [remaining] more taps to go. */
+        data class Countdown(
+            val remaining: Int,
+        ) : Result
+
+        data object Unlock : Result
+    }
+
+    /** [tapsSoFar] counts this tap. */
+    fun result(tapsSoFar: Int): Result {
+        val remaining = REQUIRED - tapsSoFar
+        return when {
+            remaining <= 0 -> Result.Unlock
+            remaining <= COUNTDOWN_FROM -> Result.Countdown(remaining)
+            else -> Result.Quiet
+        }
+    }
+}
+
 /** A single LazyColumn for the whole screen, identity/developer cards as header items ahead of the
  *  changelog list -- the same shape [ActivityScreen] and [FiltersListScreen] already use, for the
  *  same reason: this screen's own list (the changelog) has to scroll together with everything above
@@ -100,7 +141,12 @@ object Changelog {
  *  Road's pause mechanism like every other scrollable screen -- see
  *  [LazyListState.reportScrollActivity]'s doc comment for why every one of these needs that call. */
 @Composable
-fun AboutScreenBody() {
+fun AboutScreenBody(
+    rainbowRoadUnlocked: Boolean = true,
+    onRainbowRoadUnlocked: () -> Unit = {},
+    onMessage: (String) -> Unit = {},
+) {
+    var versionTaps by remember { mutableIntStateOf(0) }
     val listState = rememberLazyListState()
     listState.reportScrollActivity()
 
@@ -112,7 +158,22 @@ fun AboutScreenBody() {
         item { Spacer(Modifier.height(2.dp)) }
 
         item {
-            OutlinedCard(Modifier.fillMaxWidth()) {
+            OutlinedCard(
+                Modifier.fillMaxWidth().clickable(enabled = !rainbowRoadUnlocked) {
+                    versionTaps++
+                    when (val result = RainbowRoadTaps.result(versionTaps)) {
+                        RainbowRoadTaps.Result.Quiet -> Unit
+                        is RainbowRoadTaps.Result.Countdown ->
+                            onMessage(
+                                if (result.remaining == 1) "1 more tap..." else "${result.remaining} more taps...",
+                            )
+                        RainbowRoadTaps.Result.Unlock -> {
+                            versionTaps = 0
+                            onRainbowRoadUnlocked()
+                        }
+                    }
+                },
+            ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("SCIF Sidekick", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                     Text(

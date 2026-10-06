@@ -468,7 +468,7 @@ class RepositorySafetyInstrumentedTest {
             assertEquals(2, db.queueDao().queuedCount())
         }
 
-    @Test fun firstGmailConnectionSeedsOwnerWithStatusOnlyAndNeverOverwrites() =
+    @Test fun firstGmailConnectionSeedsOwnerWithAllFourCommandsAndNeverOverwrites() =
         runBlocking {
             context.getSharedPreferences("setup_flags_v1", Context.MODE_PRIVATE).edit().clear().commit()
             repository.seedRemoteControlOwnerIfEmpty("Owner@Example.com")
@@ -476,9 +476,9 @@ class RepositorySafetyInstrumentedTest {
             assertEquals(listOf("owner@example.com"), seeded.map { it.address })
             val owner = seeded.single()
             assertTrue(owner.canStatus)
-            assertFalse(owner.canCompose)
-            assertFalse(owner.canEnable)
-            assertFalse(owner.canDisable)
+            assertTrue(owner.canCompose)
+            assertTrue(owner.canEnable)
+            assertTrue(owner.canDisable)
             repository.seedRemoteControlOwnerIfEmpty("someone-else@example.com")
             assertEquals(
                 listOf("owner@example.com"),

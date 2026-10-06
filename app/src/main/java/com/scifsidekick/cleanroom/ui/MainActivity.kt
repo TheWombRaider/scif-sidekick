@@ -454,11 +454,6 @@ class MainActivity : FragmentActivity() {
                                         },
                                         onOpenCustomPicker = { showColorPicker = true },
                                         onFontScale = { scale -> vm.updateAppSettings { it.copy(fontScaleKey = scale.key) } },
-                                        onRainbowRoadUnlocked = {
-                                            rainbowRoadUnlocked = true
-                                            appearancePreferences.unlockRainbowRoad()
-                                            vm.messages.tryEmit("🌈 Rainbow Road unlocked. Pick it under Accent color.")
-                                        },
                                     )
 
                                     SectionHeader("Behavior")
@@ -514,7 +509,15 @@ class MainActivity : FragmentActivity() {
 
                         AppScreen.ABOUT ->
                             Box(Modifier.fillMaxSize().padding(padding)) {
-                                AboutScreenBody()
+                                AboutScreenBody(
+                                    rainbowRoadUnlocked = rainbowRoadUnlocked,
+                                    onRainbowRoadUnlocked = {
+                                        rainbowRoadUnlocked = true
+                                        appearancePreferences.unlockRainbowRoad()
+                                        vm.messages.tryEmit("🌈 Rainbow Road unlocked. Pick it under Settings → Appearance → Accent color.")
+                                    },
+                                    onMessage = { vm.messages.tryEmit(it) },
+                                )
                             }
 
                         AppScreen.FILTERS ->
@@ -819,26 +822,10 @@ private fun AppearanceCard(
     onRainbowRoadAccent: () -> Unit,
     onOpenCustomPicker: () -> Unit,
     onFontScale: (FontScale) -> Unit,
-    onRainbowRoadUnlocked: () -> Unit,
 ) {
-    // Undisclosed on purpose -- tapping the card title seven times unlocks Rainbow Road, the same
-    // "tap the build number" gag Android itself uses for Developer options. Resets if you stop
-    // partway; there is no partial-progress indicator, or it wouldn't be a secret.
-    var titleTapCount by remember { mutableStateOf(0) }
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                "Appearance",
-                fontWeight = FontWeight.Bold,
-                modifier =
-                    Modifier.clickable(enabled = !rainbowRoadUnlocked) {
-                        titleTapCount++
-                        if (titleTapCount >= 7) {
-                            titleTapCount = 0
-                            onRainbowRoadUnlocked()
-                        }
-                    },
-            )
+            Text("Appearance", fontWeight = FontWeight.Bold)
             Text("Theme", style = MaterialTheme.typography.bodySmall)
             // A real grid, columns aligned edge-to-edge like the original design -- not a
             // wrapping row of independently-sized pills, which read as unaligned "puzzle

@@ -2,7 +2,8 @@
 
 Short version. The full notes, with the reasoning behind each change, are in [docs/CHANGELOG_DETAILED.md](docs/CHANGELOG_DETAILED.md).
 
-## Unreleased
+## 1.26.0
+- The Gmail account you connect is now authorized for all four commands (Compose, Enable, Disable, Status) the first time, instead of Status only. Installs that already seeded keep their current boxes.
 - New **Commands** screen in the menu: every email command with the exact subject to use, what it does, which permission it needs, and what reply to expect.
 - New **Send test receipt** button under Settings → Remote control by email. It emails the connected Gmail account through the same queue and background job the ON/OFF receipts use.
 

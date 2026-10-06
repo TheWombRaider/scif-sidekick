@@ -229,10 +229,11 @@ class SidekickRepository(
     /**
      * Remote control defaults to on ([AppSettingsEntity.remoteControlEnabled]), but an empty
      * address list still authorizes nobody -- the switch alone was never the actual boundary. Once
-     * the connected Gmail account is known, this seeds it as the one authorized address with only
-     * the Status permission on (least privilege; Compose, Enable and Disable are granted in
-     * Settings). Runs once per install: after that, or if any address is already listed, it does
-     * nothing, so an address removed on purpose stays removed.
+     * the connected Gmail account is known, this seeds it as the one authorized address with all
+     * four permissions on (Compose, Enable, Disable, Status), so remote control works out of the
+     * box for the single owner this app is built for. Runs once per install: after that, or if any
+     * address is already listed, it does nothing, so an address removed on purpose stays removed.
+     * Installs that already seeded a Status-only owner keep what they have.
      */
     suspend fun seedRemoteControlOwnerIfEmpty(accountEmail: String) {
         val canonical = ComposeAuthorization.canonicalAddress(accountEmail) ?: return
@@ -253,9 +254,9 @@ class SidekickRepository(
                             listOf(
                                 RemoteControlCodec.Sender(
                                     canonical,
-                                    canCompose = false,
-                                    canEnable = false,
-                                    canDisable = false,
+                                    canCompose = true,
+                                    canEnable = true,
+                                    canDisable = true,
                                     canStatus = true,
                                 ),
                             ),
@@ -263,7 +264,7 @@ class SidekickRepository(
                     updatedAtMs = System.currentTimeMillis(),
                 )
             if (existing == null) db.appSettingsDao().insertDefault(next) else db.appSettingsDao().update(next)
-            logLocked(EventType.SERVICE, "Remote control: $canonical allowed to ask for status (first Gmail connection); grant other commands in Settings")
+            logLocked(EventType.SERVICE, "Remote control: $canonical authorized for Compose, Enable, Disable and Status (first Gmail connection)")
         }
         flags.edit { putBoolean(REMOTE_OWNER_SEEDED, true) }
     }

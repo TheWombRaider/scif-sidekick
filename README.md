@@ -8,7 +8,7 @@ Personal phones can't go into a SCIF, which leaves you out of reach for hours at
 
 > **Not an official or approved tool.** SCIF Sidekick is an independent open-source project, not affiliated with or endorsed by any government agency. Follow your organization's rules on personal email and messages at work. Provided as is, with no warranty.
 
-![Version](https://img.shields.io/badge/version-1.25.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.26.0-blue?style=flat-square)
 ![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack_Compose-7F52FF?style=flat-square&logo=kotlin&logoColor=white)
 ![Gmail API](https://img.shields.io/badge/Gmail-API-EA4335?style=flat-square&logo=gmail&logoColor=white)
