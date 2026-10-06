@@ -1,0 +1,9 @@
+<resources>
+    <color name="sidekick_blue">#335CFF</color>
+    <color name="sidekick_navy">#091226</color>
+    <!-- Sampled from the red-themed icon artwork's own corner tone, mirroring how the previous
+         navy value (#0E2333) matched that icon's dark-navy corners: kept in step with whatever
+         the actual icon art looks like, not an independently chosen color. -->
+    <color name="launcher_background">#2F0C0C</color>
+    <color name="splash_background">#000000</color>
+</resources>

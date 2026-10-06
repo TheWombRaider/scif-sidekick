@@ -1,0 +1,16 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.ScifSidekick" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@color/sidekick_navy</item>
+        <item name="android:navigationBarColor">@color/sidekick_navy</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <!-- Without an explicit override this theme inherits a white windowBackground from its
+             Material.Light parent, which is what shows as a bright white flash during cold start
+             (pre-31: the classic starting-window preview; 31+: the default SplashScreen API
+             background, which falls back to colorBackground/windowBackground when
+             windowSplashScreenBackground is unset). Force both to match the app's OLED-black UI. -->
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/splash_background</item>
+    </style>
+</resources>

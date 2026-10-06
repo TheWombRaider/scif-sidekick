@@ -1,0 +1,1 @@
+Room's exported JSON schema is generated into this directory during a build. Version 2 adds `sent_email_routes`; the application includes an explicit 1→2 migration and must never use destructive migration fallback.

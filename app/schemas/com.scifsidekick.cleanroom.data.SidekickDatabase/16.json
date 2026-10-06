@@ -1,0 +1,1050 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 16,
+    "identityHash": "19e77a449d20903f3bd2416fc79c3934",
+    "entities": [
+      {
+        "tableName": "forwarding_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, `watermarkMs` INTEGER NOT NULL, `destinationEmail` TEXT NOT NULL, `emailCircuitOpen` INTEGER NOT NULL, `consecutiveEmailFailures` INTEGER NOT NULL, `mmsForwardingEnabled` INTEGER NOT NULL, `callNotificationsEnabled` INTEGER NOT NULL, `contactFilterMode` TEXT NOT NULL, `contactFilterNumbersJson` TEXT NOT NULL, `updatedAtMs` INTEGER NOT NULL, `lastHeartbeatMs` INTEGER NOT NULL, `snoozedUntilMs` INTEGER NOT NULL, `gmailWatchExpirationMs` INTEGER NOT NULL, `lastHeartbeatEmailMs` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "watermarkMs",
+            "columnName": "watermarkMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "destinationEmail",
+            "columnName": "destinationEmail",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "emailCircuitOpen",
+            "columnName": "emailCircuitOpen",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "consecutiveEmailFailures",
+            "columnName": "consecutiveEmailFailures",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mmsForwardingEnabled",
+            "columnName": "mmsForwardingEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "callNotificationsEnabled",
+            "columnName": "callNotificationsEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contactFilterMode",
+            "columnName": "contactFilterMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contactFilterNumbersJson",
+            "columnName": "contactFilterNumbersJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMs",
+            "columnName": "updatedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastHeartbeatMs",
+            "columnName": "lastHeartbeatMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snoozedUntilMs",
+            "columnName": "snoozedUntilMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gmailWatchExpirationMs",
+            "columnName": "gmailWatchExpirationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastHeartbeatEmailMs",
+            "columnName": "lastHeartbeatEmailMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "forwarded_messages",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `source` TEXT NOT NULL, `senderAddress` TEXT NOT NULL, `senderDisplay` TEXT NOT NULL, `body` TEXT NOT NULL, `bodyHash` TEXT NOT NULL, `receivedAtMs` INTEGER NOT NULL, `sourceTimestampMs` INTEGER NOT NULL, `forwarded` INTEGER NOT NULL, `sendAttemptCount` INTEGER NOT NULL, `lastError` TEXT, `dedupeText` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "senderAddress",
+            "columnName": "senderAddress",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "senderDisplay",
+            "columnName": "senderDisplay",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bodyHash",
+            "columnName": "bodyHash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "receivedAtMs",
+            "columnName": "receivedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceTimestampMs",
+            "columnName": "sourceTimestampMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "forwarded",
+            "columnName": "forwarded",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sendAttemptCount",
+            "columnName": "sendAttemptCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "lastError",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "dedupeText",
+            "columnName": "dedupeText",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_forwarded_messages_senderAddress_sourceTimestampMs_bodyHash",
+            "unique": true,
+            "columnNames": [
+              "senderAddress",
+              "sourceTimestampMs",
+              "bodyHash"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_forwarded_messages_senderAddress_sourceTimestampMs_bodyHash` ON `${TABLE_NAME}` (`senderAddress`, `sourceTimestampMs`, `bodyHash`)"
+          }
+        ]
+      },
+      {
+        "tableName": "send_queue",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `channel` TEXT NOT NULL, `payloadJson` TEXT NOT NULL, `attachmentPathsJson` TEXT NOT NULL, `sourceMessageId` INTEGER, `createdAtMs` INTEGER NOT NULL, `notBeforeMs` INTEGER NOT NULL, `status` TEXT NOT NULL, `attemptCount` INTEGER NOT NULL, `lastError` TEXT, `replyDedupeKey` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "channel",
+            "columnName": "channel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadJson",
+            "columnName": "payloadJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attachmentPathsJson",
+            "columnName": "attachmentPathsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceMessageId",
+            "columnName": "sourceMessageId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "createdAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notBeforeMs",
+            "columnName": "notBeforeMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attemptCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "lastError",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "replyDedupeKey",
+            "columnName": "replyDedupeKey",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_send_queue_channel_status_notBeforeMs",
+            "unique": false,
+            "columnNames": [
+              "channel",
+              "status",
+              "notBeforeMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_send_queue_channel_status_notBeforeMs` ON `${TABLE_NAME}` (`channel`, `status`, `notBeforeMs`)"
+          },
+          {
+            "name": "index_send_queue_replyDedupeKey_channel_createdAtMs",
+            "unique": false,
+            "columnNames": [
+              "replyDedupeKey",
+              "channel",
+              "createdAtMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_send_queue_replyDedupeKey_channel_createdAtMs` ON `${TABLE_NAME}` (`replyDedupeKey`, `channel`, `createdAtMs`)"
+          }
+        ]
+      },
+      {
+        "tableName": "event_log",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `timestampMs` INTEGER NOT NULL, `type` TEXT NOT NULL, `reason` TEXT NOT NULL, `messageKey` TEXT, `queueId` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestampMs",
+            "columnName": "timestampMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reason",
+            "columnName": "reason",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "messageKey",
+            "columnName": "messageKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "queueId",
+            "columnName": "queueId",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_event_log_timestampMs",
+            "unique": false,
+            "columnNames": [
+              "timestampMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_event_log_timestampMs` ON `${TABLE_NAME}` (`timestampMs`)"
+          }
+        ]
+      },
+      {
+        "tableName": "delivery_attempts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `channel` TEXT NOT NULL, `attemptedAtMs` INTEGER NOT NULL, `queueId` INTEGER NOT NULL, `succeeded` INTEGER, `detail` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "channel",
+            "columnName": "channel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptedAtMs",
+            "columnName": "attemptedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "queueId",
+            "columnName": "queueId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "succeeded",
+            "columnName": "succeeded",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "detail",
+            "columnName": "detail",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_delivery_attempts_channel_attemptedAtMs",
+            "unique": false,
+            "columnNames": [
+              "channel",
+              "attemptedAtMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_delivery_attempts_channel_attemptedAtMs` ON `${TABLE_NAME}` (`channel`, `attemptedAtMs`)"
+          }
+        ]
+      },
+      {
+        "tableName": "processed_replies",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`gmailMessageId` TEXT NOT NULL, `processedAtMs` INTEGER NOT NULL, `targetNumber` TEXT NOT NULL, PRIMARY KEY(`gmailMessageId`))",
+        "fields": [
+          {
+            "fieldPath": "gmailMessageId",
+            "columnName": "gmailMessageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "processedAtMs",
+            "columnName": "processedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetNumber",
+            "columnName": "targetNumber",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "gmailMessageId"
+          ]
+        }
+      },
+      {
+        "tableName": "sent_email_routes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`queueId` INTEGER NOT NULL, `gmailMessageId` TEXT NOT NULL, `gmailThreadId` TEXT NOT NULL, `rfcMessageId` TEXT NOT NULL, `targetNumber` TEXT NOT NULL, `authorizedReplySendersJson` TEXT NOT NULL, `sentAtMs` INTEGER NOT NULL, PRIMARY KEY(`queueId`))",
+        "fields": [
+          {
+            "fieldPath": "queueId",
+            "columnName": "queueId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gmailMessageId",
+            "columnName": "gmailMessageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gmailThreadId",
+            "columnName": "gmailThreadId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rfcMessageId",
+            "columnName": "rfcMessageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetNumber",
+            "columnName": "targetNumber",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authorizedReplySendersJson",
+            "columnName": "authorizedReplySendersJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sentAtMs",
+            "columnName": "sentAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "queueId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sent_email_routes_gmailMessageId",
+            "unique": true,
+            "columnNames": [
+              "gmailMessageId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_sent_email_routes_gmailMessageId` ON `${TABLE_NAME}` (`gmailMessageId`)"
+          },
+          {
+            "name": "index_sent_email_routes_gmailThreadId_targetNumber",
+            "unique": false,
+            "columnNames": [
+              "gmailThreadId",
+              "targetNumber"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sent_email_routes_gmailThreadId_targetNumber` ON `${TABLE_NAME}` (`gmailThreadId`, `targetNumber`)"
+          },
+          {
+            "name": "index_sent_email_routes_rfcMessageId",
+            "unique": true,
+            "columnNames": [
+              "rfcMessageId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_sent_email_routes_rfcMessageId` ON `${TABLE_NAME}` (`rfcMessageId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "sent_gmail_messages",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`gmailMessageId` TEXT NOT NULL, `queueId` INTEGER NOT NULL, `rfcMessageId` TEXT NOT NULL, `sentAtMs` INTEGER NOT NULL, PRIMARY KEY(`gmailMessageId`))",
+        "fields": [
+          {
+            "fieldPath": "gmailMessageId",
+            "columnName": "gmailMessageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "queueId",
+            "columnName": "queueId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rfcMessageId",
+            "columnName": "rfcMessageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sentAtMs",
+            "columnName": "sentAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "gmailMessageId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sent_gmail_messages_queueId",
+            "unique": true,
+            "columnNames": [
+              "queueId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_sent_gmail_messages_queueId` ON `${TABLE_NAME}` (`queueId`)"
+          },
+          {
+            "name": "index_sent_gmail_messages_rfcMessageId",
+            "unique": true,
+            "columnNames": [
+              "rfcMessageId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_sent_gmail_messages_rfcMessageId` ON `${TABLE_NAME}` (`rfcMessageId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "pending_email_routes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`queueId` INTEGER NOT NULL, `rfcMessageId` TEXT NOT NULL, `targetNumber` TEXT, `authorizedReplySendersJson` TEXT NOT NULL, `createdAtMs` INTEGER NOT NULL, PRIMARY KEY(`queueId`))",
+        "fields": [
+          {
+            "fieldPath": "queueId",
+            "columnName": "queueId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rfcMessageId",
+            "columnName": "rfcMessageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetNumber",
+            "columnName": "targetNumber",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "authorizedReplySendersJson",
+            "columnName": "authorizedReplySendersJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "createdAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "queueId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_pending_email_routes_rfcMessageId",
+            "unique": true,
+            "columnNames": [
+              "rfcMessageId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_pending_email_routes_rfcMessageId` ON `${TABLE_NAME}` (`rfcMessageId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "telephony_part_results",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`attemptId` INTEGER NOT NULL, `queueId` INTEGER NOT NULL, `partIndex` INTEGER NOT NULL, `partCount` INTEGER NOT NULL, `resultCode` INTEGER NOT NULL, `receivedAtMs` INTEGER NOT NULL, PRIMARY KEY(`attemptId`, `partIndex`))",
+        "fields": [
+          {
+            "fieldPath": "attemptId",
+            "columnName": "attemptId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "queueId",
+            "columnName": "queueId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partIndex",
+            "columnName": "partIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partCount",
+            "columnName": "partCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resultCode",
+            "columnName": "resultCode",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "receivedAtMs",
+            "columnName": "receivedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "attemptId",
+            "partIndex"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_telephony_part_results_queueId",
+            "unique": false,
+            "columnNames": [
+              "queueId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_telephony_part_results_queueId` ON `${TABLE_NAME}` (`queueId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "forwarding_filters",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, `includeSms` INTEGER NOT NULL, `includeMms` INTEGER NOT NULL, `includeRcs` INTEGER NOT NULL, `includeCalls` INTEGER NOT NULL, `recipientsJson` TEXT NOT NULL, `conditionMode` TEXT NOT NULL, `contactMode` TEXT NOT NULL, `contactNumbersJson` TEXT NOT NULL, `keywordMode` TEXT NOT NULL, `keywordsJson` TEXT NOT NULL, `alwaysAllowOtp` INTEGER NOT NULL, `subjectTemplate` TEXT NOT NULL, `bodyTemplate` TEXT NOT NULL, `replaceRulesJson` TEXT NOT NULL, `scheduleEnabled` INTEGER NOT NULL, `scheduleDaysMask` INTEGER NOT NULL, `scheduleStartMinute` INTEGER NOT NULL, `scheduleEndMinute` INTEGER NOT NULL, `saveResults` INTEGER NOT NULL, `sendResultNotifications` INTEGER NOT NULL, `stopOnMatch` INTEGER NOT NULL, `createdAtMs` INTEGER NOT NULL, `updatedAtMs` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sortOrder",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "includeSms",
+            "columnName": "includeSms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "includeMms",
+            "columnName": "includeMms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "includeRcs",
+            "columnName": "includeRcs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "includeCalls",
+            "columnName": "includeCalls",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipientsJson",
+            "columnName": "recipientsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conditionMode",
+            "columnName": "conditionMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contactMode",
+            "columnName": "contactMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contactNumbersJson",
+            "columnName": "contactNumbersJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keywordMode",
+            "columnName": "keywordMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keywordsJson",
+            "columnName": "keywordsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "alwaysAllowOtp",
+            "columnName": "alwaysAllowOtp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subjectTemplate",
+            "columnName": "subjectTemplate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bodyTemplate",
+            "columnName": "bodyTemplate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "replaceRulesJson",
+            "columnName": "replaceRulesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scheduleEnabled",
+            "columnName": "scheduleEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scheduleDaysMask",
+            "columnName": "scheduleDaysMask",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scheduleStartMinute",
+            "columnName": "scheduleStartMinute",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scheduleEndMinute",
+            "columnName": "scheduleEndMinute",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "saveResults",
+            "columnName": "saveResults",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sendResultNotifications",
+            "columnName": "sendResultNotifications",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stopOnMatch",
+            "columnName": "stopOnMatch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "createdAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMs",
+            "columnName": "updatedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "app_settings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `appLockEnabled` INTEGER NOT NULL, `fontScaleKey` TEXT NOT NULL, `duplicateSuppressionEnabled` INTEGER NOT NULL, `duplicateWindowMinutes` INTEGER NOT NULL, `softEmailPerMinuteCap` INTEGER NOT NULL, `softSmsPerMinuteCap` INTEGER NOT NULL, `retryOnNetworkReconnect` INTEGER NOT NULL, `composeViaEmailEnabled` INTEGER NOT NULL, `authorizedComposeSendersJson` TEXT NOT NULL, `messageRetentionDays` INTEGER NOT NULL, `eventRetentionDays` INTEGER NOT NULL, `gmailPushEnabled` INTEGER NOT NULL, `pubsubTopicName` TEXT NOT NULL, `pubsubSubscriptionName` TEXT NOT NULL, `remoteEnableViaEmailEnabled` INTEGER NOT NULL, `authorizedRemoteEnableSendersJson` TEXT NOT NULL, `remoteDisableViaEmailEnabled` INTEGER NOT NULL, `authorizedRemoteDisableSendersJson` TEXT NOT NULL, `replyConfirmationsEnabled` INTEGER NOT NULL, `heartbeatEnabled` INTEGER NOT NULL, `heartbeatIntervalHours` INTEGER NOT NULL, `heartbeatRecipientsJson` TEXT NOT NULL, `remoteStatusViaEmailEnabled` INTEGER NOT NULL, `authorizedRemoteStatusSendersJson` TEXT NOT NULL, `updatedAtMs` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "appLockEnabled",
+            "columnName": "appLockEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fontScaleKey",
+            "columnName": "fontScaleKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "duplicateSuppressionEnabled",
+            "columnName": "duplicateSuppressionEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "duplicateWindowMinutes",
+            "columnName": "duplicateWindowMinutes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "softEmailPerMinuteCap",
+            "columnName": "softEmailPerMinuteCap",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "softSmsPerMinuteCap",
+            "columnName": "softSmsPerMinuteCap",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retryOnNetworkReconnect",
+            "columnName": "retryOnNetworkReconnect",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "composeViaEmailEnabled",
+            "columnName": "composeViaEmailEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authorizedComposeSendersJson",
+            "columnName": "authorizedComposeSendersJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "messageRetentionDays",
+            "columnName": "messageRetentionDays",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventRetentionDays",
+            "columnName": "eventRetentionDays",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gmailPushEnabled",
+            "columnName": "gmailPushEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pubsubTopicName",
+            "columnName": "pubsubTopicName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pubsubSubscriptionName",
+            "columnName": "pubsubSubscriptionName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteEnableViaEmailEnabled",
+            "columnName": "remoteEnableViaEmailEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authorizedRemoteEnableSendersJson",
+            "columnName": "authorizedRemoteEnableSendersJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteDisableViaEmailEnabled",
+            "columnName": "remoteDisableViaEmailEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authorizedRemoteDisableSendersJson",
+            "columnName": "authorizedRemoteDisableSendersJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "replyConfirmationsEnabled",
+            "columnName": "replyConfirmationsEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "heartbeatEnabled",
+            "columnName": "heartbeatEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "heartbeatIntervalHours",
+            "columnName": "heartbeatIntervalHours",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "heartbeatRecipientsJson",
+            "columnName": "heartbeatRecipientsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteStatusViaEmailEnabled",
+            "columnName": "remoteStatusViaEmailEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authorizedRemoteStatusSendersJson",
+            "columnName": "authorizedRemoteStatusSendersJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMs",
+            "columnName": "updatedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '19e77a449d20903f3bd2416fc79c3934')"
+    ]
+  }
+}
