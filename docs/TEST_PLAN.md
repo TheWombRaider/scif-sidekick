@@ -141,3 +141,7 @@ With TalkBack on, open Home and Settings and swipe through the controls. Each sw
 ## 16. Font scale and contrast (manual)
 
 Set *Settings → Display → Font size and style* to the largest size and *Display size* to the largest, then open Home, Filters, a filter editor and Settings. Text must not be cut off and every control must stay reachable. Repeat with a dark and a light theme and each accent colour; body text should stay readable against its background. Record anything that fails.
+
+## 17. Commands screen and test receipt (manual)
+
+Open the menu and choose *Commands*. Check that each subject shown matches what the README table says, and that the line under the heading reflects whether remote control is on and how many addresses are authorized. Then open *Settings → Remote control by email* and tap *Send test receipt* with Gmail connected: a snackbar should confirm it was queued, and an email titled "SCIF Sidekick: self-test receipt" should reach the connected account within a minute or two. With Gmail disconnected the button should say to connect Gmail and queue nothing.

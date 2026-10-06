@@ -56,6 +56,7 @@ fun AppSettingsScreenBody(
     settings: AppSettingsEntity,
     onChange: (AppSettingsEntity) -> Unit,
     onDisablePush: () -> Unit = {},
+    onSendTestReceipt: () -> Unit = {},
     hideInRecents: Boolean = false,
     onHideInRecentsChange: (Boolean) -> Unit = {},
 ) {
@@ -151,7 +152,7 @@ fun AppSettingsScreenBody(
             }
         }
 
-        RemoteControlCard(settings = settings, onChange = onChange)
+        RemoteControlCard(settings = settings, onChange = onChange, onSendTestReceipt = onSendTestReceipt)
 
         OutboundSimCard(settings = settings, onChange = onChange)
 
@@ -434,6 +435,7 @@ fun BackupRestoreScreenBody(
 private fun RemoteControlCard(
     settings: AppSettingsEntity,
     onChange: (AppSettingsEntity) -> Unit,
+    onSendTestReceipt: () -> Unit,
 ) {
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -503,6 +505,13 @@ private fun RemoteControlCard(
                     },
                 ) { Text("Add") }
             }
+            Text("Test receipts", style = MaterialTheme.typography.labelLarge)
+            Text(
+                "Emails a test receipt to the connected Gmail account through the same path the ON and OFF " +
+                    "receipts use. If it arrives within a minute or two, receipts work. If not, check Activity.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedButton(onClick = onSendTestReceipt) { Text("Send test receipt") }
         }
     }
 }

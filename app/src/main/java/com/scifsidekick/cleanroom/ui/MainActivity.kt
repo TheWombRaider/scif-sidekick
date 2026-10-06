@@ -81,6 +81,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.scifsidekick.cleanroom.AppGraph
 import com.scifsidekick.cleanroom.service.ForwardingService
+import com.scifsidekick.cleanroom.util.RemoteControlCodec
 import com.scifsidekick.cleanroom.util.suspendRunCatching
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
@@ -315,6 +316,7 @@ class MainActivity : FragmentActivity() {
                                         AppScreen.FILTER_EDITOR -> "Edit filter"
                                         AppScreen.ACTIVITY -> "Activity"
                                         AppScreen.SETTINGS -> "Settings"
+                                        AppScreen.COMMANDS -> "Commands"
                                         AppScreen.ABOUT -> "About"
                                         AppScreen.DEVELOPER -> "Developer tools"
                                     },
@@ -334,6 +336,7 @@ class MainActivity : FragmentActivity() {
                                                 "Filters" to AppScreen.FILTERS,
                                                 "Activity" to AppScreen.ACTIVITY,
                                                 "Settings" to AppScreen.SETTINGS,
+                                                "Commands" to AppScreen.COMMANDS,
                                                 "About" to AppScreen.ABOUT,
                                             ).forEach { (label, screen) ->
                                                 DropdownMenuItem(
@@ -463,6 +466,7 @@ class MainActivity : FragmentActivity() {
                                         settings = appSettings,
                                         onChange = { updated -> vm.updateAppSettings { updated } },
                                         onDisablePush = vm::disablePush,
+                                        onSendTestReceipt = vm::sendTestReceipt,
                                         hideInRecents = hideInRecents,
                                         onHideInRecentsChange = {
                                             hideInRecents = it
@@ -496,6 +500,15 @@ class MainActivity : FragmentActivity() {
                                     onSendTestMessage = { type, sender, body, images -> vm.sendTestMessage(type, sender, body, images) },
                                     onTestConnectivity = vm::testGmailConnectivity,
                                     onTestPush = vm::testPushSetup,
+                                )
+                            }
+
+                        AppScreen.COMMANDS ->
+                            Box(Modifier.fillMaxSize().padding(padding)) {
+                                CommandsScreenBody(
+                                    remoteControlEnabled = appSettings.remoteControlEnabled,
+                                    authorizedAddressCount =
+                                        RemoteControlCodec.fromJson(appSettings.remoteControlSendersJson).size,
                                 )
                             }
 
@@ -665,6 +678,7 @@ internal enum class AppScreen {
     FILTER_EDITOR,
     ACTIVITY,
     SETTINGS,
+    COMMANDS,
     ABOUT,
     DEVELOPER,
 }

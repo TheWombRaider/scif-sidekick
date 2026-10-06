@@ -2,6 +2,10 @@
 
 Short version. The full notes, with the reasoning behind each change, are in [docs/CHANGELOG_DETAILED.md](docs/CHANGELOG_DETAILED.md).
 
+## Unreleased
+- New **Commands** screen in the menu: every email command with the exact subject to use, what it does, which permission it needs, and what reply to expect.
+- New **Send test receipt** button under Settings → Remote control by email. It emails the connected Gmail account through the same queue and background job the ON/OFF receipts use.
+
 ## 1.25.0
 - Security hardening: the widget's on/off button can no longer be triggered by other apps, an owner address added automatically on first connect can only ask for status, and the premium-rate and satellite number ranges are blocked.
 - Texts are now capped at 60 an hour and 200 a day (still 10 a minute). Forwards leave a small reserve (30 a day, 10 an hour) so receipts, status replies and the heartbeat still go out during a flood.

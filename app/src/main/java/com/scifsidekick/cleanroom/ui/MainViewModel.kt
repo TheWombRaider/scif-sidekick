@@ -16,6 +16,7 @@ import com.scifsidekick.cleanroom.data.ForwardingStateEntity
 import com.scifsidekick.cleanroom.messaging.EmailPayload
 import com.scifsidekick.cleanroom.messaging.IncomingMessage
 import com.scifsidekick.cleanroom.service.ForwardingService
+import com.scifsidekick.cleanroom.service.SelfTestReceipt
 import com.scifsidekick.cleanroom.service.SnoozeWorker
 import com.scifsidekick.cleanroom.service.StatusWidgetProvider
 import com.scifsidekick.cleanroom.util.BackupCrypto
@@ -381,6 +382,22 @@ class MainViewModel(
                     graph.repository.recordEvent(EventType.SEND_FAILED, "Gmail connectivity test failed: ${failure.message}")
                     messages.emit("Connectivity test failed: ${failure.message}")
                 }
+        }
+
+    /**
+     * Queues a test receipt to the connected Gmail account through the real receipt path (see
+     * [SelfTestReceipt]). The snackbar says what was queued, not that it arrived: arrival is the proof.
+     */
+    fun sendTestReceipt() =
+        viewModelScope.launch {
+            val message =
+                when (val outcome = suspendRunCatching { SelfTestReceipt.send(getApplication(), graph) }.getOrNull()) {
+                    is SelfTestReceipt.Outcome.Queued -> "Test receipt queued to ${outcome.recipient}. It should arrive within a minute or two."
+                    SelfTestReceipt.Outcome.NotConnected -> "Connect Gmail before sending a test receipt"
+                    SelfTestReceipt.Outcome.NotQueued -> "Test receipt was not queued (storage limit reached). See Activity."
+                    null -> "Test receipt could not be queued. See Activity."
+                }
+            messages.emit(message)
         }
 
     /** Gmail push (beta) diagnostic: calls users.watch() once, then immediately pulls the
