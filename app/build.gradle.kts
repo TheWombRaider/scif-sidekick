@@ -120,11 +120,11 @@ dependencies {
     // bodies -- a real implementation on the test classpath shadows the stub so PayloadCodec and
     // the other org.json-based (de)serialization used throughout this app can actually be
     // exercised by a plain JVM unit test, without pulling in Robolectric for it.
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260814")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test:core-ktx:1.6.1")
-    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:core-ktx:1.7.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.room:room-testing:2.8.5")
     androidTestImplementation("androidx.work:work-testing:2.12.0")
 }

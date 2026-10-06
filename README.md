@@ -153,6 +153,7 @@ The APK lands at `app/build/outputs/apk/debug/app-debug.apk`.
 | **Android 17 OTPs** | The OS can withhold one-time-passcode SMS from apps for up to 3 hours. Don't rely on this for time-critical codes. |
 | **MMS out** | Unverified against real carriers. Images are downscaled conservatively. |
 | **Privacy** | Message payloads live in an on-device database and are pruned after 30 days. Android backups are off. *Settings → Hide app content in Recents* blanks the app in the recent-apps screen and blocks screenshots. Your mail goes to Google and your chosen recipients, so secure that mailbox. |
+| **Known gaps** | The interface is English only, and it hasn't been checked with TalkBack, the largest font sizes or for colour contrast beyond the first pass; see `docs/TEST_PLAN.md` §15-16. |
 | **Phones only** | The app needs telephony, so tablets and Wi-Fi-only devices aren't supported. |
 | **Policy** | Your organization's rules still apply. See the notice at the top. |
 | **Play Store** | SMS permissions are restricted. This is built for sideloading. |

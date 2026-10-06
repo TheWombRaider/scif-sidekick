@@ -137,3 +137,7 @@ The incoming-MMS receiver uses the `BROADCAST_SMS` permission for both its SMS a
 ## 15. Accessibility spot check (manual)
 
 With TalkBack on, open Home and Settings and swipe through the controls. Each switch and checkbox should be read together with its label (for example "App lock, switch, on"), a filter card's switch should be read as "<filter name> enabled", and the filter list's selection checkboxes as "Select <filter name>". Report any control that is read with no name.
+
+## 16. Font scale and contrast (manual)
+
+Set *Settings → Display → Font size and style* to the largest size and *Display size* to the largest, then open Home, Filters, a filter editor and Settings. Text must not be cut off and every control must stay reachable. Repeat with a dark and a light theme and each accent colour; body text should stay readable against its background. Record anything that fails.
