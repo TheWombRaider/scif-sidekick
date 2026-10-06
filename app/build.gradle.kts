@@ -105,7 +105,7 @@ dependencies {
     ksp("androidx.room:room-compiler:2.8.5")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.0")
     implementation("com.google.android.gms:play-services-auth:21.6.0")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.fragment:fragment-ktx:1.9.1")
