@@ -44,6 +44,9 @@ Personal phones can't go into a SCIF, which leaves you out of reach for hours at
 | 💓 | **Heartbeat** | Optional "still alive" email on a schedule. If it goes quiet, something broke. Recipients are one tap away: Settings lists every address your filters already forward to. |
 | ⚡ | **Fast** | Forwarded within seconds of arrival. Email replies are picked up in about 30 seconds, or faster with Gmail push. |
 | 🛡️ | **Built-in limits** | Rolling email and text caps, a premium-rate number block and a circuit breaker so a bug can never flood your inbox or run up your carrier bill. |
+| ⏸️ | **Pause without opening the app** | A Quick Settings tile, a home-screen widget and snooze pause or resume forwarding in one tap. |
+| 🩺 | **Self-monitoring** | A watchdog restarts the forwarding service if Android kills it, and bounce detection flags a forward that Gmail accepted but the recipient's mail server rejected. |
+| 📶 | **Dual SIM** | On dual-SIM phones, choose which line your outgoing texts are sent from. |
 | 🔒 | **App lock & backup** | Biometric or screen-lock gate, plus export and restore of all your filters and settings under **Settings → Backup and restore**. |
 
 ---
@@ -96,7 +99,7 @@ Everything below is done from any email client. Put the command in the **subject
 
 - 🔑 Each address in **Settings → Remote control by email** has its own checkboxes for *Compose, Enable, Disable, Status*. Trusting someone for one never implies another. A new address starts with all four checked, so untick what they shouldn't have. `[SCIF:HELP]` needs no checkbox: it changes nothing, so any address on the list can ask for it.
 - ✉️ The sender must pass Gmail's DMARC check. The visible `From` line alone is never trusted.
-- 🤐 **Unauthorized senders get no reply**, so a stranger can't use the app to confirm your mailbox is live. Rejections are logged in History as security events.
+- 🤐 **Unauthorized senders get no reply**, so a stranger can't use the app to confirm your mailbox is live. Rejections are logged in Activity as security events.
 - 🧾 Receipts read the state back after the change, so they report what happened, not what was asked.
 - 🔕 One master switch turns all of it off.
 
@@ -181,12 +184,12 @@ Signed release builds are still supported; the steps are in [RELEASING.md](RELEA
 
 | Symptom | Check |
 |---|---|
-| Nothing is forwarded | Forwarding is ON, the Gmail chip has a ✓, at least one enabled filter has a recipient, battery is *Unrestricted*. History shows why a message was skipped. |
-| A reply isn't sent as a text | Forwarding must be ON. Keep the `[SCIF:+number]` tag, reply from an address that received the forward, and look for a "Blocked" entry in History. |
+| Nothing is forwarded | Forwarding is ON, the Gmail chip has a ✓, at least one enabled filter has a recipient, battery is *Unrestricted*. Activity shows why a message was skipped. |
+| A reply isn't sent as a text | Forwarding must be ON. Keep the `[SCIF:+number]` tag, reply from an address that received the forward, and look for a "Blocked" entry in Activity. |
 | `[SCIF:ON]` does nothing | The sending address needs *Enable*, Gmail must show a DMARC pass for it, and the mail must be unread in your inbox. Allow 15 minutes or more. |
 | "Gmail connection canceled" right after tapping Connect Gmail | Google rejected the app before showing any consent screen. With the phone attached, `adb logcat` shows `status=UNREGISTERED_ON_API_CONSOLE` from `Auth.Api.Credentials`. Your OAuth client's package and SHA-1 must match the installed APK exactly (`apksigner verify --print-certs app-debug.apk`). If they already match, run `adb shell am force-stop com.google.android.gms` and try again; Google Play services can cache the earlier rejection. |
 | "Reconnect Gmail" | Open the app and tap Connect Gmail. If your Google Cloud app is still in *Testing*, publish it; those grants expire after 7 days. |
-| A command gets no reply | Remote control is on, the sender is on the list (and ticked for that command), Gmail shows a DMARC pass, and the subject has exactly one command tag. Rejections show in History. Email `[SCIF:HELP]` for the full syntax. |
+| A command gets no reply | Remote control is on, the sender is on the list (and ticked for that command), Gmail shows a DMARC pass, and the subject has exactly one command tag. Rejections show in Activity. Email `[SCIF:HELP]` for the full syntax. |
 | RCS chats are missing | Notification access is on and Google/Samsung Messages notifications aren't muted. |
 | You'd like to know if it stops | Turn on the Heartbeat email (Settings), then tap an address under **Add from your filters** to send it there. |
 
@@ -194,13 +197,14 @@ Signed release builds are still supported; the steps are in [RELEASING.md](RELEA
 
 ## 🧹 Uninstall and your data
 
-Uninstalling deletes everything the app stored on the phone (queue, history, settings). Exported backups stay where you saved them. To cut Google access, remove the app under *Google Account → Security → Third-party access* and delete the Google Cloud project you created. Forwarded emails stay in the mailboxes they were sent to until you delete them.
+Uninstalling deletes everything the app stored on the phone (queue, activity, settings). Exported backups stay where you saved them, so export one from **Settings → Backup and restore** first if you plan to reinstall. To cut Google access, remove the app under *Google Account → Security → Third-party access* and delete the Google Cloud project you created. Forwarded emails stay in the mailboxes they were sent to until you delete them.
 
 ## 🔎 Limits and trust
 
 - Anyone can email a command. Only allowlisted addresses that pass Gmail's DMARC check are obeyed, and only for the permissions you ticked.
 - Your Gmail account is the root of trust: whoever controls it can read every forward and give commands. Use 2-step verification.
 - Forwarded text passes through Google and your recipients' mail providers. The on-phone database is protected by Android's app sandbox, not extra encryption.
+- Hard caps, not settings: texts are limited to 10 a minute, 60 an hour and 200 a day. Email is limited to 20 a minute, 300 an hour and 450 a day, with the last 10 an hour and 30 a day held back for receipts, status replies and the heartbeat. Five failed sends in a row trip a circuit breaker.
 - This is a convenience tool, not a security product.
 
 ---
@@ -213,6 +217,8 @@ Uninstalling deletes everything the app stored on the phone (queue, history, set
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the pieces fit together
 - [docs/TEST_PLAN.md](docs/TEST_PLAN.md): device checks
 - [docs/QA_AUDIT.md](docs/QA_AUDIT.md): the 1.1.0 audit
+- [SECURITY.md](SECURITY.md): how to report a vulnerability
+- [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): working on the project
 
 ---
 
