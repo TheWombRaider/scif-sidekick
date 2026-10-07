@@ -8,7 +8,7 @@ Personal phones can't go into a SCIF, which leaves you out of reach for hours at
 
 > **Not an official or approved tool.** SCIF Sidekick is an independent open-source project, not affiliated with or endorsed by any government agency. Follow your organization's rules on personal email and messages at work. Provided as is, with no warranty.
 
-![Version](https://img.shields.io/badge/version-1.26.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.27.0-blue?style=flat-square)
 ![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack_Compose-7F52FF?style=flat-square&logo=kotlin&logoColor=white)
 ![Gmail API](https://img.shields.io/badge/Gmail-API-EA4335?style=flat-square&logo=gmail&logoColor=white)
@@ -71,6 +71,7 @@ Everything below is done from any email client. Put the command in the **subject
 | **Forwarding on** | `[SCIF:ON]` | ignored | Turns forwarding on, even if the app is idle | ✅ "Forwarding ENABLED" receipt plus status |
 | **Forwarding off** | `[SCIF:OFF]` | ignored | Turns forwarding off | ✅ "Forwarding DISABLED" receipt plus status |
 | **Status** | `[SCIF:STATUS]` | ignored | Changes nothing | 📊 On/off, service health, Gmail auth, queue depth |
+| **Help** | `[SCIF:HELP]` | ignored | Changes nothing | 📖 A man-page-style manual of every command and its syntax |
 
 | Command | Speed | Works while forwarding is off? | Permission needed |
 |---|---|---|---|
@@ -79,13 +80,14 @@ Everything below is done from any email client. Put the command in the **subject
 | `[SCIF:ON]` | ~15 min (Android may delay longer while idle) | ✅ That's its job | *Enable* |
 | `[SCIF:OFF]` | ~30 sec | n/a | *Disable* |
 | `[SCIF:STATUS]` | ~30 sec on, ~15 min off | ✅ Yes | *Status* |
+| `[SCIF:HELP]` | ~30 sec on, ~15 min off | ✅ Yes | None. Any address on the list works |
 
 **Syntax rules**
 
 - `TEXT+` is followed by the number with country code, digits only, no spaces or dashes: `TEXT+15551234567`. It must be the **entire subject**. Extra words make the app ignore it.
 - A text can be at most 1,600 characters and 10 SMS segments, whichever limit is hit first: about 1,500 plain characters, or about 670 with emoji or non-Latin letters. Longer or blank messages are blocked.
 - Only the new part of your reply is sent. Quoted history is stripped.
-- For `[SCIF:ON]`, `[SCIF:OFF]` and `[SCIF:STATUS]` the tag can sit anywhere in the subject, so a `Re:` or `Fwd:` prefix is fine.
+- For `[SCIF:ON]`, `[SCIF:OFF]`, `[SCIF:STATUS]` and `[SCIF:HELP]` the tag can sit anywhere in the subject, so a `Re:` or `Fwd:` prefix is fine.
 - A subject containing both `[SCIF:ON]` and `[SCIF:OFF]` is ignored as ambiguous.
 
 **How it stays safe**

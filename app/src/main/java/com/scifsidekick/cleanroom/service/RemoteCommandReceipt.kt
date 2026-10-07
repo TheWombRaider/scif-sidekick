@@ -57,7 +57,7 @@ object RemoteCommandReceipt {
             when (command) {
                 RemoteCommand.ENABLE -> "ENABLED"
                 RemoteCommand.DISABLE -> "DISABLED"
-                RemoteCommand.STATUS -> return
+                RemoteCommand.STATUS, RemoteCommand.HELP -> return
             }
         val now = System.currentTimeMillis()
         val summary = graph.repository.buildStatusSummary(graph.gmail.isAvailable, now)
