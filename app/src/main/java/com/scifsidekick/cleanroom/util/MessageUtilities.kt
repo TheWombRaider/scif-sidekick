@@ -77,8 +77,8 @@ object PhoneNumbers {
     fun extractComposeTarget(subject: String): String? = composeTag.matchEntire(subject)?.groupValues?.get(1)
 }
 
-/** The commands a subject line can carry: the two master-switch ones, and a read-only query. */
-enum class RemoteCommand { ENABLE, DISABLE, STATUS }
+/** The commands a subject line can carry: the two master-switch ones, and two read-only queries. */
+enum class RemoteCommand { ENABLE, DISABLE, STATUS, HELP }
 
 /**
  * The subject tags for "turn forwarding back on" and "turn it off." Each is deliberately its own
@@ -101,6 +101,9 @@ enum class RemoteCommand { ENABLE, DISABLE, STATUS }
  *   service's poll answers it while forwarding is on (~30s), the worker while it is off (~15min).
  *   Whichever is alive is the one that can see it, and they are never both alive at once.
  *
+ * - `HELP` is read-only like `STATUS` and handled in exactly the same two places for exactly the
+ *   same reason: the service's poll while forwarding is on, the worker while it is off.
+ *
  * A subject carrying more than one recognized tag is not a command at all: it is ambiguous about
  * which was meant, so [parse] returns null and no side acts on it, the same treatment
  * [PhoneNumbers.extractFromSubject] already gives a reply subject naming two routing targets.
@@ -109,12 +112,14 @@ object RemoteCommands {
     const val ENABLE_TAG = "[SCIF:ON]"
     const val DISABLE_TAG = "[SCIF:OFF]"
     const val STATUS_TAG = "[SCIF:STATUS]"
+    const val HELP_TAG = "[SCIF:HELP]"
 
     private val tags =
         mapOf(
             RemoteCommand.ENABLE to Regex("\\[SCIF:ON]", RegexOption.IGNORE_CASE),
             RemoteCommand.DISABLE to Regex("\\[SCIF:OFF]", RegexOption.IGNORE_CASE),
             RemoteCommand.STATUS to Regex("\\[SCIF:STATUS]", RegexOption.IGNORE_CASE),
+            RemoteCommand.HELP to Regex("\\[SCIF:HELP]", RegexOption.IGNORE_CASE),
         )
 
     /** Exactly one recognized tag means that command; none or more than one means no command. */
@@ -126,6 +131,8 @@ object RemoteCommands {
     fun isDisableForwardingCommand(subject: String): Boolean = parse(subject) == RemoteCommand.DISABLE
 
     fun isStatusCommand(subject: String): Boolean = parse(subject) == RemoteCommand.STATUS
+
+    fun isHelpCommand(subject: String): Boolean = parse(subject) == RemoteCommand.HELP
 }
 
 object ReplyBodyCleaner {

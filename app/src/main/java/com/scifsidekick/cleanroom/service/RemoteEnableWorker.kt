@@ -61,7 +61,7 @@ class RemoteEnableWorker(
         // The master switch gates both tags at once now; which specific address may actually act
         // on either one is checked per-command below, once the candidate's subject is parsed.
         if (!settings.remoteControlEnabled) return Result.success()
-        val wantedTags = listOf(RemoteCommands.ENABLE_TAG, RemoteCommands.STATUS_TAG)
+        val wantedTags = listOf(RemoteCommands.ENABLE_TAG, RemoteCommands.STATUS_TAG, RemoteCommands.HELP_TAG)
         if (!graph.gmail.isAvailable) return Result.success()
         // Searches only the allowlisted senders, so mail from anyone else never competes for a
         // slot; with nobody allowlisted there is nothing to act on.
@@ -94,6 +94,8 @@ class RemoteEnableWorker(
                 RemoteCommandPlanner.Action.CONSUME -> suspendRunCatching { graph.gmail.markRead(candidate.id) }
                 RemoteCommandPlanner.Action.ANSWER_STATUS ->
                     RemoteStatusResponder.answer(graph, candidate, settings, drainAfterQueueing = true)
+                RemoteCommandPlanner.Action.ANSWER_HELP ->
+                    RemoteHelpResponder.answer(graph, candidate, settings, drainAfterQueueing = true)
                 RemoteCommandPlanner.Action.REJECT -> {
                     graph.repository.recordBlockedAttempt(
                         "Blocked remote-enable email command: sender " +
