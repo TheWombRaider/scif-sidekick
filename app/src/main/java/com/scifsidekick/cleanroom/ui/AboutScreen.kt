@@ -45,6 +45,16 @@ object Changelog {
     val entries =
         listOf(
             ChangelogEntry(
+                "1.28.0",
+                listOf(
+                    "New filters have Missed calls checked by default.",
+                    "The scheduled-hours day picker is one even row of seven days instead of wrapping chips.",
+                    "Heartbeat email: one-tap buttons add any address your filters already forward to.",
+                    "Backup and Restore are now a single \"Backup and restore\" section.",
+                ),
+                date = "2026-10-07",
+            ),
+            ChangelogEntry(
                 "1.27.0",
                 listOf(
                     "New [SCIF:HELP] email command: replies with a full manual of every command and its syntax.",

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -25,6 +26,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -829,17 +831,23 @@ private fun ScheduleCard(
                 Switch(checked = filter.scheduleEnabled, onCheckedChange = { onChange(filter.copy(scheduleEnabled = it)) })
             }
             if (filter.scheduleEnabled) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // One row of seven equal segments, so the week always reads as a single control
+                // instead of wrapping to a stray "Sa" on a second line. The check icon is dropped
+                // because it would crowd the two-letter labels; the filled segment is the state.
+                MultiChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     dayLabels.forEachIndexed { index, label ->
                         val bit = 1 shl index
                         val active = (filter.scheduleDaysMask and bit) != 0
-                        FilterChip(
-                            selected = active,
-                            onClick = {
+                        SegmentedButton(
+                            checked = active,
+                            onCheckedChange = {
                                 val next = if (active) filter.scheduleDaysMask and bit.inv() else filter.scheduleDaysMask or bit
                                 onChange(filter.copy(scheduleDaysMask = next))
                             },
-                            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = dayLabels.size),
+                            icon = {},
+                            contentPadding = PaddingValues(horizontal = 0.dp),
+                            label = { Text(label, maxLines = 1) },
                         )
                     }
                 }
