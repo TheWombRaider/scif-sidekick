@@ -28,9 +28,13 @@ data class CommandHelpEntry(
     val title: String,
     val subject: String,
     val effect: String,
-    val permission: String,
+    /** The per-address checkbox this command needs in Settings; null when any listed address may use it. */
+    val permission: String?,
     val reply: String,
-)
+) {
+    val permissionLine: String
+        get() = if (permission == null) "Works for any address on the authorized list." else "Needs the \"$permission\" permission."
+}
 
 object CommandHelp {
     const val COMPOSE_EXAMPLE = "TEXT+15551234567"
@@ -64,6 +68,16 @@ object CommandHelp {
                 reply = "On or off, service health, Gmail authorization and queue depth.",
             ),
             CommandHelpEntry(
+                title = "Help",
+                subject = RemoteCommands.HELP_TAG,
+                effect =
+                    "Changes nothing. Emails back this full manual: every command, its exact syntax, " +
+                        "and the rules. Picked up within about 30 seconds while forwarding is on, " +
+                        "about 15 minutes while it is off.",
+                permission = null,
+                reply = "The command manual, as plain text.",
+            ),
+            CommandHelpEntry(
                 title = "Send a new text",
                 subject = COMPOSE_EXAMPLE,
                 effect =
@@ -78,10 +92,10 @@ object CommandHelp {
         listOf(
             "To answer a forwarded text, hit Reply and keep the $REPLY_TAG_EXAMPLE tag in the subject. " +
                 "Your answer is sent as an SMS.",
-            "The three [SCIF:...] tags can sit anywhere in the subject, so a Re: or Fwd: prefix is fine.",
+            "The [SCIF:ON], [SCIF:OFF], [SCIF:STATUS] and [SCIF:HELP] tags can sit anywhere in the subject, so a Re: or Fwd: prefix is fine.",
             "A subject with more than one command tag is ignored as ambiguous.",
-            "The sender must be on the authorized list in Settings, ticked for that command, and Gmail " +
-                "must show a DMARC pass for the address.",
+            "The sender must be on the authorized list in Settings, ticked for that command (Help only " +
+                "needs to be on the list), and Gmail must show a DMARC pass for the address.",
             "Mail from anyone else gets no reply. Rejected commands are logged in Activity.",
         )
 
@@ -140,7 +154,7 @@ fun CommandsScreenBody(
                     }
                     Text(entry.effect, style = MaterialTheme.typography.bodySmall)
                     Text("Reply: ${entry.reply}", style = MaterialTheme.typography.bodySmall)
-                    Text("Needs the \"${entry.permission}\" permission.", style = MaterialTheme.typography.bodySmall)
+                    Text(entry.permissionLine, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

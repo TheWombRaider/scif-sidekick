@@ -82,4 +82,14 @@ object RemoteControlCodec {
             .filter(capability)
             .any { ComposeAuthorization.canonicalAddress(it.address) == canonical }
     }
+
+    /**
+     * True when [address] is on the allowlist at all, whatever it is ticked for. Only the help
+     * command uses this: it changes nothing and reveals nothing about the phone, so it needs no
+     * permission of its own, but it still must not answer a stranger.
+     */
+    fun isListed(
+        sendersJson: String,
+        address: String?,
+    ): Boolean = isAuthorized(sendersJson, address) { true }
 }

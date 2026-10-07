@@ -2,6 +2,11 @@
 
 Short version. The full notes, with the reasoning behind each change, are in [docs/CHANGELOG_DETAILED.md](docs/CHANGELOG_DETAILED.md).
 
+## 1.27.0
+- New `[SCIF:HELP]` email command: replies with a man-page-style manual of every command, its exact subject, what it does, and the rules. Generated from the same data as the Commands screen, so it can't drift. Works for any address on the authorized list; anyone else gets no reply.
+- The in-app changelog is now a bulleted list per version instead of one paragraph.
+- The About screen drops the app description and shows the version, build, release date and the 0BSD license notice.
+
 ## 1.26.0
 - The Gmail account you connect is now authorized for all four commands (Compose, Enable, Disable, Status) the first time, instead of Status only. Installs that already seeded keep their current boxes.
 - New **Commands** screen in the menu: every email command with the exact subject to use, what it does, which permission it needs, and what reply to expect.
