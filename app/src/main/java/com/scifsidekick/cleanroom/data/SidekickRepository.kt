@@ -107,7 +107,7 @@ class SidekickRepository(
 
     suspend fun createFilter(name: String): Long =
         db.withTransaction {
-            val id = db.filterDao().insert(ForwardingFilterEntity(name = name.ifBlank { "New filter" }))
+            val id = db.filterDao().insert(ForwardingFilterEntity(name = name.ifBlank { "New filter" }, includeCalls = true))
             logLocked(EventType.SERVICE, "Created filter '${name.ifBlank { "New filter" }}'")
             id
         }

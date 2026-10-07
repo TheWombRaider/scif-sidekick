@@ -81,6 +81,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.scifsidekick.cleanroom.AppGraph
 import com.scifsidekick.cleanroom.service.ForwardingService
+import com.scifsidekick.cleanroom.util.ComposeAuthorization
+import com.scifsidekick.cleanroom.util.PayloadCodec
 import com.scifsidekick.cleanroom.util.RemoteControlCodec
 import com.scifsidekick.cleanroom.util.suspendRunCatching
 import kotlinx.coroutines.Dispatchers
@@ -457,8 +459,16 @@ class MainActivity : FragmentActivity() {
                                     )
 
                                     SectionHeader("Behavior")
+                                    val filterRecipients =
+                                        remember(filters) {
+                                            filters
+                                                .flatMap { PayloadCodec.pathsFromJson(it.recipientsJson) }
+                                                .mapNotNull { ComposeAuthorization.canonicalAddress(it) }
+                                                .distinct()
+                                        }
                                     AppSettingsScreenBody(
                                         settings = appSettings,
+                                        filterRecipients = filterRecipients,
                                         onChange = { updated -> vm.updateAppSettings { updated } },
                                         onDisablePush = vm::disablePush,
                                         onSendTestReceipt = vm::sendTestReceipt,
@@ -469,7 +479,7 @@ class MainActivity : FragmentActivity() {
                                         },
                                     )
 
-                                    SectionHeader("Data")
+                                    SectionHeader("Backup and restore")
                                     BackupRestoreScreenBody(
                                         onExport = { passphrase ->
                                             pendingExportPassphrase = passphrase

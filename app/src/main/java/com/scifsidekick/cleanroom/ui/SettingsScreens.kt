@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
@@ -59,6 +61,8 @@ fun AppSettingsScreenBody(
     onSendTestReceipt: () -> Unit = {},
     hideInRecents: Boolean = false,
     onHideInRecentsChange: (Boolean) -> Unit = {},
+    /** Every address any filter forwards to, offered as one-tap choices for the heartbeat email. */
+    filterRecipients: List<String> = emptyList(),
 ) {
     Column(
         Modifier.fillMaxWidth(),
@@ -218,6 +222,24 @@ fun AppSettingsScreenBody(
                         )
                     },
                 )
+                // Addresses already forwarded to by a filter, so setting up the heartbeat after
+                // creating a filter never means typing the same address twice.
+                val suggestions = filterRecipients.filter { it !in heartbeatRecipients }
+                if (suggestions.isNotEmpty()) {
+                    Text("Add from your filters", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        suggestions.forEach { address ->
+                            AssistChip(
+                                onClick = {
+                                    onChange(
+                                        settings.copy(heartbeatRecipientsJson = PayloadCodec.pathsToJson(heartbeatRecipients + address)),
+                                    )
+                                },
+                                label = { Text(address) },
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -365,12 +387,9 @@ fun BackupRestoreScreenBody(
 ) {
     var protectWithPassphrase by rememberSaveable { mutableStateOf(false) }
     var passphrase by rememberSaveable { mutableStateOf("") }
-    Column(
-        Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        OutlinedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Backup", fontWeight = FontWeight.Bold)
                 Text(
                     "Saves every filter and app setting to a JSON file you choose on this device. " +
@@ -409,9 +428,8 @@ fun BackupRestoreScreenBody(
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Export backup") }
             }
-        }
-        OutlinedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            HorizontalDivider(Modifier.padding(vertical = 6.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Restore", fontWeight = FontWeight.Bold)
                 Text(
                     "Replaces every filter currently configured with the ones in the chosen backup file. " +
