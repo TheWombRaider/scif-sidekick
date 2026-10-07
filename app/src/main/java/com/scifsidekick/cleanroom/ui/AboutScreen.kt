@@ -45,6 +45,14 @@ object Changelog {
     val entries =
         listOf(
             ChangelogEntry(
+                "1.28.1",
+                listOf(
+                    "Text caps raised to 100 an hour and 1,000 a day (were 60 and 200); still 10 a minute.",
+                    "Email caps are unchanged.",
+                ),
+                date = "2026-10-07",
+            ),
+            ChangelogEntry(
                 "1.28.0",
                 listOf(
                     "New filters have Missed calls checked by default.",

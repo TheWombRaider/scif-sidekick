@@ -79,17 +79,21 @@ class RateLimitTiersTest {
     @Test fun `sms has hourly and daily caps`() =
         runBlocking {
             val hourly = FakeAttempts()
-            repeat(60) { hourly.rows += QueueChannel.SMS to (now - 50L * 60_000L + it * 20_000L) }
+            repeat(100) { hourly.rows += QueueChannel.SMS to (now - 50L * 60_000L + it * 20_000L) }
             assertTrue(RollingRateLimiter(hourly).nextAllowedAt(QueueChannel.SMS, now) > now)
 
             val daily = FakeAttempts()
-            repeat(200) { daily.rows += QueueChannel.SMS to (now - day + 60_000L + it * 400_000L) }
+            repeat(1_000) { daily.rows += QueueChannel.SMS to (now - day + 60_000L + it * 80_000L) }
             assertTrue(RollingRateLimiter(daily).nextAllowedAt(QueueChannel.SMS, now) > now)
 
             val fine = FakeAttempts()
-            repeat(59) { fine.rows += QueueChannel.SMS to (now - 50L * 60_000L + it * 20_000L) }
+            repeat(99) { fine.rows += QueueChannel.SMS to (now - 50L * 60_000L + it * 20_000L) }
             assertEquals(now, RollingRateLimiter(fine).nextAllowedAt(QueueChannel.SMS, now))
         }
+
+    @Test fun `sms ceilings are 10 a minute, 100 an hour and 1000 a day`() {
+        assertEquals(listOf(10, 100, 1_000), HardRateLimits.SMS.map { it.maxAttempts })
+    }
 
     @Test fun `premium and satellite ranges are blocked`() {
         listOf(

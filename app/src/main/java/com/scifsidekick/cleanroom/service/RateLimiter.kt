@@ -29,8 +29,8 @@ object HardRateLimits {
     val SMS =
         listOf(
             RateRule(maxAttempts = 10, windowMs = 60_000L),
-            RateRule(maxAttempts = 60, windowMs = 60L * 60_000L),
-            RateRule(maxAttempts = 200, windowMs = 24L * 60L * 60_000L),
+            RateRule(maxAttempts = 100, windowMs = 60L * 60_000L),
+            RateRule(maxAttempts = 1_000, windowMs = 24L * 60L * 60_000L),
         )
     const val CIRCUIT_FAILURE_THRESHOLD = 5
 }

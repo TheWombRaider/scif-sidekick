@@ -22,7 +22,7 @@ There is intentionally no Telephony content-provider observer, cursor, catch-up 
 `ForwardingService` runs two independently limited channels:
 
 - `EMAIL`: 20 rolling minute / 300 rolling hour / 450 rolling 24 hours. Ordinary forwards stop at 20 / 290 / 420 so receipts, status replies and the heartbeat keep a reserve; attempts are counted together, so the total never exceeds the first set.
-- `SMS`: 10 rolling minute / 60 rolling hour / 200 rolling 24 hours (shared with MMS).
+- `SMS`: 10 rolling minute / 100 rolling hour / 1,000 rolling 24 hours (shared with MMS).
 
 `QueueProcessor` claims one Room row, asks `RollingRateLimiter` for the earliest safe time, and reserves a `delivery_attempts` record before calling an external API. A process death can therefore under-send but cannot allow a rate-limit reservation to disappear.
 

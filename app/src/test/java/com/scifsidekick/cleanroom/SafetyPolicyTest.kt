@@ -208,7 +208,7 @@ class SafetyPolicyTest {
 
     @Test fun `hard caps cannot be configured away`() {
         assertEquals(listOf(20, 300, 450), HardRateLimits.EMAIL.map { it.maxAttempts })
-        assertEquals(listOf(10, 60, 200), HardRateLimits.SMS.map { it.maxAttempts })
+        assertEquals(listOf(10, 100, 1_000), HardRateLimits.SMS.map { it.maxAttempts })
     }
 
     @Test fun `oversized or empty email replies cannot fan out into SMS`() {

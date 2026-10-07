@@ -21,7 +21,7 @@ See [Filters](#filters) and [Remote control by email](#remote-control-by-email) 
 - A second strict `receivedAt > watermark` check prevents replay even if an old event is accidentally passed to the processor.
 - Restart and reboot handling releases only interrupted app-owned email claims. Gmail retries first reconcile a deterministic RFC Message-ID against Sent mail. An interrupted SMS send is quarantined instead of automatically retried because Android cannot prove whether the modem accepted it before process death.
 - Every Gmail API call is reserved in `delivery_attempts` before network access and is subject to all three rolling caps: 20/minute, 300/hour, and 450/24 hours.
-- Email and SMS queues persist in Room. SMS replies have their own cap: 10/minute, 60/hour, 200/day. Ordinary email forwards stop at 20/290/420 so system mail (receipts, status, heartbeat) keeps a reserve inside the totals above.
+- Email and SMS queues persist in Room. SMS replies have their own cap: 10/minute, 100/hour, 1,000/day. Ordinary email forwards stop at 20/290/420 so system mail (receipts, status, heartbeat) keeps a reserve inside the totals above.
 - Outbound texts to well-known premium-rate and satellite number ranges are refused (`PremiumNumbers`), at reply time and again at send time.
 - Five consecutive Gmail send failures open a persistent circuit breaker. Only the in-app manual reset closes it.
 - A tagged email can route to SMS only when its Gmail thread or `References`/`In-Reply-To` Message-ID matches a forward previously sent by this installation. A forged `[SCIF:+number]` subject is logged, marked processed, and never sent.

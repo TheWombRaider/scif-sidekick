@@ -8,7 +8,7 @@ Personal phones can't go into a SCIF, which leaves you out of reach for hours at
 
 > **Not an official or approved tool.** SCIF Sidekick is an independent open-source project, not affiliated with or endorsed by any government agency. Follow your organization's rules on personal email and messages at work. Provided as is, with no warranty.
 
-![Version](https://img.shields.io/badge/version-1.28.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.28.1-blue?style=flat-square)
 ![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack_Compose-7F52FF?style=flat-square&logo=kotlin&logoColor=white)
 ![Gmail API](https://img.shields.io/badge/Gmail-API-EA4335?style=flat-square&logo=gmail&logoColor=white)
@@ -202,6 +202,7 @@ Uninstalling deletes everything the app stored on the phone (queue, history, set
 - Anyone can email a command. Only allowlisted addresses that pass Gmail's DMARC check are obeyed, and only for the permissions you ticked.
 - Your Gmail account is the root of trust: whoever controls it can read every forward and give commands. Use 2-step verification.
 - Forwarded text passes through Google and your recipients' mail providers. The on-phone database is protected by Android's app sandbox, not extra encryption.
+- Hard caps, not settings: texts are limited to 10 a minute, 100 an hour and 1,000 a day. Email is limited to 20 a minute, 300 an hour and 450 a day, with the last 10 an hour and 30 a day held back for receipts, status replies and the heartbeat. Five failed sends in a row trip a circuit breaker.
 - This is a convenience tool, not a security product.
 
 ---

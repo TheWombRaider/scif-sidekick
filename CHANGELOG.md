@@ -2,6 +2,9 @@
 
 Short version. The full notes, with the reasoning behind each change, are in [docs/CHANGELOG_DETAILED.md](docs/CHANGELOG_DETAILED.md).
 
+## 1.28.1
+- Raised the text caps so a busy day with several correspondents doesn't hit them: 100 an hour (was 60) and 1,000 a day (was 200). Still 10 a minute. The email caps are unchanged.
+
 ## 1.28.0
 - New filters have **Missed calls** checked by default.
 - The day picker under "Only forward during scheduled hours" is a single evenly spaced row of seven toggles. It used to wrap, leaving "Sa" alone on a second line.
