@@ -41,10 +41,10 @@ Personal phones can't go into a SCIF, which leaves you out of reach for hours at
 | 🔌 | **Remote control** | Turn forwarding on, off, or check on it with a one-line email. ON, OFF, STATUS and HELP each reply so you know it landed. |
 | 📖 | **Built-in manual** | Email `[SCIF:HELP]` and get a man-page-style reference of every command and its exact syntax. The same list is on the app's **Commands** screen. |
 | 🔐 | **OTP-safe** | Verification codes can bypass your contact and keyword rules so a bank code never gets filtered out. |
-| 💓 | **Heartbeat** | Optional "still alive" email on a schedule. If it goes quiet, something broke. |
+| 💓 | **Heartbeat** | Optional "still alive" email on a schedule. If it goes quiet, something broke. Recipients are one tap away: Settings lists every address your filters already forward to. |
 | ⚡ | **Fast** | Forwarded within seconds of arrival. Email replies are picked up in about 30 seconds, or faster with Gmail push. |
 | 🛡️ | **Built-in limits** | Rolling email and text caps, a premium-rate number block and a circuit breaker so a bug can never flood your inbox or run up your carrier bill. |
-| 🔒 | **App lock & backup** | Biometric or screen-lock gate, plus export and restore of all your filters and settings. |
+| 🔒 | **App lock & backup** | Biometric or screen-lock gate, plus export and restore of all your filters and settings under **Settings → Backup and restore**. |
 
 ---
 
@@ -109,12 +109,12 @@ Forwarding is a stack of filters you manage from the menu. A message is checked 
 
 | Setting | Options |
 |---|---|
-| **Message types** | SMS, MMS, RCS, missed calls, any mix |
+| **Message types** | SMS, MMS, RCS, missed calls, any mix. A new filter starts with all four checked |
 | **Recipients** | One or more email addresses |
 | **Conditions** | Forward all, or by sender allow/block list and keyword must-contain/must-not-contain |
 | **OTP bypass** | Verification codes skip contact and keyword rules (on by default) |
 | **Template** | Custom subject and body with `{Incoming Number}` `{Contact Name}` `{Message Body}` `{Received Time}` `{Source}` `{Reply Tag}` `{Verb}`, plus find-and-replace rules |
-| **Schedule** | Active days and hours, including overnight windows like 22:00–06:00 |
+| **Schedule** | Active days (one row of seven toggles) and hours, including overnight windows like 22:00–06:00 |
 | **Order** | Drag to reorder. "Stop processing further filters" works like an email client rule |
 | **Per filter** | Save to history, notify on send |
 
@@ -188,7 +188,7 @@ Signed release builds are still supported; the steps are in [RELEASING.md](RELEA
 | "Reconnect Gmail" | Open the app and tap Connect Gmail. If your Google Cloud app is still in *Testing*, publish it; those grants expire after 7 days. |
 | A command gets no reply | Remote control is on, the sender is on the list (and ticked for that command), Gmail shows a DMARC pass, and the subject has exactly one command tag. Rejections show in History. Email `[SCIF:HELP]` for the full syntax. |
 | RCS chats are missing | Notification access is on and Google/Samsung Messages notifications aren't muted. |
-| You'd like to know if it stops | Turn on the Heartbeat email. |
+| You'd like to know if it stops | Turn on the Heartbeat email (Settings), then tap an address under **Add from your filters** to send it there. |
 
 ---
 
