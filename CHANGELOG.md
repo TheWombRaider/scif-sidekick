@@ -2,6 +2,12 @@
 
 Short version. The full notes, with the reasoning behind each change, are in [docs/CHANGELOG_DETAILED.md](docs/CHANGELOG_DETAILED.md).
 
+## 1.28.0
+- New filters have **Missed calls** checked by default.
+- The day picker under "Only forward during scheduled hours" is a single evenly spaced row of seven toggles. It used to wrap, leaving "Sa" alone on a second line.
+- Heartbeat email: an **Add from your filters** row of one-tap buttons lists every address your filters forward to, so you don't retype an address you already entered.
+- Settings: Backup and Restore are one card under a **Backup and restore** heading, replacing the separate cards under "Data".
+
 ## 1.27.0
 - New `[SCIF:HELP]` email command: replies with a man-page-style manual of every command, its exact subject, what it does, and the rules. Generated from the same data as the Commands screen, so it can't drift. Works for any address on the authorized list; anyone else gets no reply.
 - The in-app changelog is now a bulleted list per version instead of one paragraph.
