@@ -25,6 +25,9 @@ object RemoteCommandPlanner {
         /** Hand to the status responder, which checks the Status permission itself. */
         ANSWER_STATUS,
 
+        /** Hand to the help responder, which checks the sender is on the authorized list itself. */
+        ANSWER_HELP,
+
         /** Authorized enable command: apply it. Nothing after this one is examined. */
         APPLY_ENABLE,
     }
@@ -50,6 +53,7 @@ object RemoteCommandPlanner {
                             Action.REJECT
                         }
                     RemoteCommand.STATUS -> Action.ANSWER_STATUS
+                    RemoteCommand.HELP -> Action.ANSWER_HELP
                     else -> Action.CONSUME
                 }
             steps += Step(candidate, action)

@@ -47,4 +47,12 @@ class RemoteControlCodecTest {
     @Test fun `an empty list authorizes nobody regardless of the master switch`() {
         assertFalse(RemoteControlCodec.isAuthorized("[]", "anyone@example.com", Sender::canCompose))
     }
+
+    @Test fun `isListed accepts any listed address whatever it is ticked for`() {
+        val json = RemoteControlCodec.toJson(listOf(Sender("a@example.com", false, false, false, false)))
+        assertTrue(RemoteControlCodec.isListed(json, "A@Example.com"))
+        assertFalse(RemoteControlCodec.isListed(json, "b@example.com"))
+        assertFalse(RemoteControlCodec.isListed(json, null))
+        assertFalse(RemoteControlCodec.isListed("not json", "a@example.com"))
+    }
 }

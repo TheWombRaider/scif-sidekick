@@ -281,6 +281,12 @@ class ForwardingService : Service() {
                 RemoteStatusResponder.answer(graph, reply, settings, drainAfterQueueing = false)
                 return@forEach
             }
+            // Same shape as the status query above: either state can answer it, no drain needed here.
+            if (RemoteCommands.isHelpCommand(reply.subject)) {
+                graph.repository.recordIgnoredGmailCandidate(reply.id)
+                RemoteHelpResponder.answer(graph, reply, settings, drainAfterQueueing = false)
+                return@forEach
+            }
             val replyTarget = PhoneNumbers.extractFromSubject(reply.subject)
             val composeTarget = if (replyTarget == null) PhoneNumbers.extractComposeTarget(reply.subject) else null
             val target = replyTarget ?: composeTarget

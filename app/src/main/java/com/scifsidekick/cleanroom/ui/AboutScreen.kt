@@ -3,6 +3,7 @@ package com.scifsidekick.cleanroom.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,80 +27,167 @@ import com.scifsidekick.cleanroom.BuildConfig
 
 data class ChangelogEntry(
     val version: String,
-    val summary: String,
+    val changes: List<String>,
+    /** ISO date (yyyy-MM-dd), or null where the release date wasn't recorded. */
+    val date: String? = null,
 )
 
 /** Hand-maintained, not generated -- bump this alongside every version bump in app/build.gradle.kts,
  *  the same way the pre-1.9 releases' INSTALL.txt "WHAT'S NEW" section was written by hand for each
- *  build. Newest first. Versions 1.3.0-1.6.x and 1.8.x have no surviving release notes -- no
- *  INSTALL.txt and no tagged commit in this repo's history -- so there's a real gap there, not an
- *  omission. */
+ *  build. Newest first, one short bullet per change. Versions 1.3.0-1.6.x and 1.8.x have no
+ *  surviving release notes -- no INSTALL.txt and no tagged commit in this repo's history -- so
+ *  there's a real gap there, not an omission. Dates exist only where git history recorded them. */
 object Changelog {
+    const val LICENSE_NOTICE =
+        "Licensed under the BSD Zero Clause License (0BSD). Free to use, copy, modify and distribute, " +
+            "with no attribution required."
+
     val entries =
         listOf(
             ChangelogEntry(
+                "1.27.0",
+                listOf(
+                    "New [SCIF:HELP] email command: replies with a full manual of every command and its syntax.",
+                    "Help works for any address on the authorized list, whichever boxes are ticked.",
+                    "Changelog is now a bulleted list per version.",
+                    "About screen shows the release date and license.",
+                ),
+                date = "2026-10-07",
+            ),
+            ChangelogEntry(
                 "1.26.0",
-                "New Commands screen listing every email command, a \"Send test receipt\" button in Settings, and the " +
-                    "Gmail account you connect is now authorized for Compose, Enable, Disable and Status from the start.",
+                listOf(
+                    "New Commands screen listing every email command.",
+                    "New \"Send test receipt\" button in Settings.",
+                    "The Gmail account you connect is authorized for Compose, Enable, Disable and Status from the start.",
+                ),
+                date = "2026-10-06",
             ),
             ChangelogEntry(
                 "1.25.0",
-                "Security hardening: the widget toggle can't be triggered by other apps, premium-rate numbers are " +
-                    "blocked, texts are capped per hour and day, and the remote-command check can't be buried by " +
-                    "junk mail. Receipts now send reliably, and there is a new \"Hide app content in Recents\" setting.",
+                listOf(
+                    "The widget toggle can't be triggered by other apps.",
+                    "Premium-rate numbers are blocked.",
+                    "Texts are capped per hour and per day.",
+                    "The remote-command check can't be buried by junk mail.",
+                    "Receipts now send reliably.",
+                    "New \"Hide app content in Recents\" setting.",
+                ),
+                date = "2026-10-06",
             ),
             ChangelogEntry(
                 "1.24.0",
-                "[SCIF:ON] and [SCIF:OFF] now email back a confirmation with the current status. " +
+                listOf(
+                    "[SCIF:ON] and [SCIF:OFF] email back a confirmation with the current status.",
                     "Unauthorized senders get no reply.",
+                ),
             ),
             ChangelogEntry(
                 "1.23.1",
-                "Heartbeat email's \"Send every\" now takes a custom number of hours, not just the 6h/12h/24h/48h " +
-                    "presets.",
+                listOf("Heartbeat email's \"Send every\" takes a custom number of hours, not just the 6h/12h/24h/48h presets."),
             ),
             ChangelogEntry(
                 "1.23.0",
-                "Compose, Enable, Disable, and Status are now one \"Remote control by email\" card: a single kill " +
-                    "switch, on by default, plus one address list where each address gets its own checkbox per " +
-                    "command instead of four separate allowlists.",
+                listOf(
+                    "Compose, Enable, Disable and Status are now one \"Remote control by email\" card.",
+                    "One kill switch, on by default.",
+                    "One address list, with a checkbox per command for each address.",
+                ),
             ),
             ChangelogEntry(
                 "1.22.0",
-                "Texts are forwarded the moment they arrive, even with the screen off, and History shows how long each took. " +
-                    "Email replies and commands are picked up about every 30 seconds instead of 90. Pub/Sub access is only " +
-                    "requested while Gmail push is on.",
+                listOf(
+                    "Texts are forwarded the moment they arrive, even with the screen off.",
+                    "History shows how long each forward took.",
+                    "Email replies and commands are picked up about every 30 seconds instead of 90.",
+                    "Pub/Sub access is only requested while Gmail push is on.",
+                ),
             ),
-            ChangelogEntry("1.21.0", "Dual-SIM phones can now choose which line outbound texts are sent from."),
-            ChangelogEntry("1.20.0", "Added \"[SCIF:STATUS]\" -- email the app to ask what it's doing and get a summary back."),
-            ChangelogEntry("1.19.1", "Fixed the heartbeat email not actually sending while forwarding was switched off."),
-            ChangelogEntry("1.19.0", "Added an opt-in heartbeat email so a silent failure shows up as a message that stops arriving."),
-            ChangelogEntry("1.18.0", "Replies you send by email now get a confirmation email back saying whether the text actually sent."),
-            ChangelogEntry("1.17.0", "Added \"Disable forwarding by email\" -- the [SCIF:OFF] counterpart, with its own separate allowlist."),
-            ChangelogEntry("1.16.1", "Reduced background battery use from RCS notification access."),
-            ChangelogEntry("1.16.0", "Added \"Enable forwarding by email\" -- an allowlisted [SCIF:ON] email can turn forwarding back on while the phone is out of reach."),
-            ChangelogEntry("1.15.0", "Added this About screen (version, changelog, developer info) and dashboard filter quick-toggles."),
-            ChangelogEntry("1.14.2", "Audit fixes: async color-wheel bitmap generation, removed a blocking debug-only preference write."),
-            ChangelogEntry("1.14.1", "Fixed accent selection resetting your scroll position on the Settings screen."),
-            ChangelogEntry("1.14.0", "Rainbow Road now animates continuously through scrolling."),
-            ChangelogEntry("1.13.7", "Rainbow Road's scroll-pause fix now covers the Home, Settings, and Developer tools screens too."),
-            ChangelogEntry("1.13.6", "Rainbow Road pauses its color animation while you're actively scrolling."),
-            ChangelogEntry("1.13.5", "Rainbow Road's color update rate lowered further to reduce scroll lag."),
-            ChangelogEntry("1.13.4", "Rainbow Road's color update throttled to fix severe lag while it's active."),
-            ChangelogEntry("1.13.3", "Fixed RCS reply routing for contacts not saved to your phone."),
-            ChangelogEntry("1.13.0", "Removed database encryption after confirmed on-device migration failures."),
-            ChangelogEntry("1.12.8", "RCS reply-routing, telephony result, and message-dedup fixes."),
-            ChangelogEntry("1.12.3", "Added Gmail push (beta), the Rainbow Road easter egg, and RCS reply-routing fixes."),
-            ChangelogEntry("1.11.2", "Added multi-select delete to the Filters list."),
-            ChangelogEntry("1.11.1", "UI polish and bug fixes from an overnight review."),
-            ChangelogEntry("1.11.0", "Added background watchdog, bounce detection, snooze, home-screen widget, and backup encryption."),
-            ChangelogEntry("1.10.0", "Dashboard/Activity/Settings UI consolidation; filters now require a recipient to save."),
-            ChangelogEntry("1.9.2", "Editable test-message body, MMS photo attachments in tests, and a full-screen history log."),
-            ChangelogEntry("1.9.1", "Fixed a bug that could send a duplicate reply SMS."),
-            ChangelogEntry("1.7.0", "Added a Quick Settings tile to pause/resume forwarding without opening the app."),
-            ChangelogEntry("1.2.1", "Dark mode now uses true pure-black OLED backgrounds."),
-            ChangelogEntry("1.2.0", "Added RCS coverage via notification access, Appearance customization (theme + accent), and developer tools."),
-            ChangelogEntry("1.1.0", "Initial release -- SMS/MMS forwarding to Gmail with reply-by-email support."),
+            ChangelogEntry("1.21.0", listOf("Dual-SIM phones can choose which line outbound texts are sent from.")),
+            ChangelogEntry("1.20.0", listOf("Added [SCIF:STATUS]: email the app to ask what it's doing and get a summary back.")),
+            ChangelogEntry("1.19.1", listOf("Fixed the heartbeat email not sending while forwarding was switched off.")),
+            ChangelogEntry("1.19.0", listOf("Added an opt-in heartbeat email, so a silent failure shows up as a message that stops arriving.")),
+            ChangelogEntry("1.18.0", listOf("Replies you send by email get a confirmation email back saying whether the text sent.")),
+            ChangelogEntry("1.17.0", listOf("Added \"Disable forwarding by email\": the [SCIF:OFF] counterpart, with its own allowlist.")),
+            ChangelogEntry("1.16.1", listOf("Reduced background battery use from RCS notification access.")),
+            ChangelogEntry("1.16.0", listOf("Added \"Enable forwarding by email\": an allowlisted [SCIF:ON] email turns forwarding back on while the phone is out of reach.")),
+            ChangelogEntry(
+                "1.15.0",
+                listOf(
+                    "Added this About screen with version and changelog.",
+                    "Added quick-toggle filters on the dashboard.",
+                ),
+            ),
+            ChangelogEntry(
+                "1.14.2",
+                listOf(
+                    "Color-wheel bitmaps are generated asynchronously.",
+                    "Removed a blocking debug-only preference write.",
+                ),
+            ),
+            ChangelogEntry("1.14.1", listOf("Fixed accent selection resetting your scroll position in Settings.")),
+            ChangelogEntry("1.14.0", listOf("Rainbow Road now animates continuously through scrolling.")),
+            ChangelogEntry("1.13.7", listOf("Rainbow Road's scroll-pause fix now covers the Home, Settings and Developer tools screens too.")),
+            ChangelogEntry("1.13.6", listOf("Rainbow Road pauses its color animation while you scroll.")),
+            ChangelogEntry("1.13.5", listOf("Lowered Rainbow Road's color update rate further to reduce scroll lag.")),
+            ChangelogEntry("1.13.4", listOf("Throttled Rainbow Road's color update to fix severe lag while it's active.")),
+            ChangelogEntry("1.13.3", listOf("Fixed RCS reply routing for contacts not saved to your phone.")),
+            ChangelogEntry("1.13.0", listOf("Removed database encryption after confirmed on-device migration failures.")),
+            ChangelogEntry(
+                "1.12.8",
+                listOf(
+                    "RCS reply-routing fixes.",
+                    "Telephony result fixes.",
+                    "Message de-duplication fixes.",
+                ),
+            ),
+            ChangelogEntry(
+                "1.12.3",
+                listOf(
+                    "Added Gmail push (beta).",
+                    "Added the Rainbow Road easter egg.",
+                    "RCS reply-routing fixes.",
+                ),
+            ),
+            ChangelogEntry("1.11.2", listOf("Added multi-select delete to the Filters list.")),
+            ChangelogEntry("1.11.1", listOf("UI polish and bug fixes from an overnight review.")),
+            ChangelogEntry(
+                "1.11.0",
+                listOf(
+                    "Added a background watchdog.",
+                    "Added bounce detection.",
+                    "Added snooze.",
+                    "Added a home-screen widget.",
+                    "Added backup encryption.",
+                ),
+            ),
+            ChangelogEntry(
+                "1.10.0",
+                listOf(
+                    "Consolidated the Dashboard, Activity and Settings screens.",
+                    "Filters now require a recipient to save.",
+                ),
+            ),
+            ChangelogEntry(
+                "1.9.2",
+                listOf(
+                    "Test message body is editable.",
+                    "Test messages can include MMS photo attachments.",
+                    "History log is now full-screen.",
+                ),
+            ),
+            ChangelogEntry("1.9.1", listOf("Fixed a bug that could send a duplicate reply SMS.")),
+            ChangelogEntry("1.7.0", listOf("Added a Quick Settings tile to pause/resume forwarding without opening the app.")),
+            ChangelogEntry("1.2.1", listOf("Dark mode uses true pure-black OLED backgrounds.")),
+            ChangelogEntry(
+                "1.2.0",
+                listOf(
+                    "Added RCS coverage via notification access.",
+                    "Added Appearance customization (theme and accent).",
+                    "Added developer tools.",
+                ),
+            ),
+            ChangelogEntry("1.1.0", listOf("Initial release: SMS/MMS forwarding to Gmail with reply-by-email support.")),
         )
 }
 
@@ -180,11 +268,11 @@ fun AboutScreenBody(
                         "Version ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})",
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Text(
-                        "Forwards texts to email and turns email replies back into texts, so people who " +
-                            "can't carry a phone into a SCIF can stay reachable.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    Changelog.entries
+                        .firstOrNull { it.version == BuildConfig.VERSION_NAME }
+                        ?.date
+                        ?.let { Text("Released $it", style = MaterialTheme.typography.bodySmall) }
+                    Text(Changelog.LICENSE_NOTICE, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -196,8 +284,16 @@ fun AboutScreenBody(
         items(Changelog.entries, key = ChangelogEntry::version) { entry ->
             OutlinedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(entry.version, fontWeight = FontWeight.Bold)
-                    Text(entry.summary, style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(entry.version, fontWeight = FontWeight.Bold)
+                        entry.date?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    }
+                    entry.changes.forEach { change ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("•", style = MaterialTheme.typography.bodySmall)
+                            Text(change, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
         }

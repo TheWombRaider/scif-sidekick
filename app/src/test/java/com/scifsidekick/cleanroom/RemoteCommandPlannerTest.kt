@@ -71,6 +71,18 @@ class RemoteCommandPlannerTest {
     }
 
     @Test
+    fun helpIsHandedToTheResponderForEveryCandidate() {
+        val steps = RemoteCommandPlanner.plan(listOf(candidate("a", "Re: [SCIF:HELP]", "x@example.org")), senders)
+        assertEquals(listOf(Action.ANSWER_HELP), steps.map { it.action })
+    }
+
+    @Test
+    fun helpPlusAnotherTagIsAmbiguousAndConsumed() {
+        val steps = RemoteCommandPlanner.plan(listOf(candidate("a", "[SCIF:HELP] [SCIF:OFF]")), senders)
+        assertEquals(listOf(Action.CONSUME), steps.map { it.action })
+    }
+
+    @Test
     fun onlyTheFirstTwentyCandidatesAreExamined() {
         val many = (1..30).map { candidate("m$it", "[SCIF:ON]", "x$it@example.org") }
         assertEquals(RemoteCommandPlanner.MAX_CANDIDATES, RemoteCommandPlanner.plan(many, senders).size)
