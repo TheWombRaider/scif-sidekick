@@ -136,14 +136,23 @@ class GraphAuthenticationTest {
         assertNull(auth(""))
     }
 
-    @Test fun `very long header does not take noticeable time and is rejected without a dmarc clause`() {
-        val long = "spf=pass smtp.mailfrom=agency.gov; ".repeat(3_000) + "x".repeat(10_000)
-        assertTrue(long.length >= 100_000)
-        val start = System.nanoTime()
-        val result = auth(long)
-        val elapsedMs = (System.nanoTime() - start) / 1_000_000
-        assertNull(result)
-        assertTrue("took $elapsedMs ms", elapsedMs < 200)
+    // Timing bounds are deliberately generous (5 s) so a loaded CI runner cannot flake them, yet the
+    // inputs are large enough that quadratic or catastrophic behaviour would blow far past the bound.
+    @Test(timeout = 5000) fun `very long header is rejected quickly without a dmarc clause`() {
+        val long = "spf=pass smtp.mailfrom=agency.gov; ".repeat(30_000) + "x".repeat(100_000)
+        assertTrue(long.length >= 1_000_000)
+        assertNull(auth(long))
+    }
+
+    @Test(timeout = 5000) fun `very long header with a trailing dmarc clause still authenticates quickly`() {
+        val long = "spf=pass smtp.mailfrom=agency.gov; ".repeat(30_000) + "dmarc=pass header.from=agency.gov"
+        assertEquals("boss@agency.gov", auth(long))
+    }
+
+    @Test(timeout = 5000) fun `deeply nested comments and long whitespace runs are handled quickly`() {
+        val nested = "(".repeat(200_000) + ")".repeat(200_000)
+        assertEquals("boss@agency.gov", auth("$nested; dmarc=pass header.from=agency.gov;" + " ".repeat(500_000) + "x"))
+        assertNull(auth("; ".repeat(200_000) + " ".repeat(500_000)))
     }
 
     @Test fun `uppercase DMARC=PASS is accepted as the documented form`() {
@@ -176,22 +185,95 @@ class GraphAuthenticationTest {
         assertNull(auth(pass, "Boss <boss@AGENCY.GOV.>"))
     }
 
-    @Test fun `ten thousand empty segments are fast and rejected`() {
-        val value = ";".repeat(10_000)
-        val start = System.nanoTime()
-        val result = auth(value)
-        val elapsedMs = (System.nanoTime() - start) / 1_000_000
-        assertNull(result)
-        assertTrue("took $elapsedMs ms", elapsedMs < 200)
+    @Test(timeout = 5000) fun `many empty segments are rejected quickly`() {
+        assertNull(auth(";".repeat(10_000)))
+        assertNull(auth(";".repeat(1_000_000)))
     }
 
-    @Test fun `ten thousand repeated dmarc-free segments are fast and rejected`() {
-        val value = "; spf=pass ".repeat(10_000)
-        val start = System.nanoTime()
-        val result = auth(value)
-        val elapsedMs = (System.nanoTime() - start) / 1_000_000
-        assertNull(result)
-        assertTrue("took $elapsedMs ms", elapsedMs < 200)
+    @Test(timeout = 5000) fun `many repeated dmarc-free segments are rejected quickly`() {
+        assertNull(auth("; spf=pass ".repeat(10_000)))
+        assertNull(auth("; spf=pass ".repeat(200_000)))
+    }
+
+    @Test fun `a dmarc clause hidden by an unclosed comment cannot stand in for the real failing one`() {
+        val forged =
+            "spf=pass smtp.mailfrom=evil.com; dkim=pass header.d=evil.com(; dmarc=fail action=none header.from=x); dmarc=pass header.from=agency.gov"
+        assertNull(auth(forged))
+    }
+
+    @Test fun `two dmarc results in one clause are rejected`() {
+        assertNull(auth("dmarc=pass dmarc=fail header.from=agency.gov"))
+        assertNull(auth("dmarc=fail dmarc=pass header.from=agency.gov"))
+    }
+
+    @Test fun `a comment mentioning dmarc is rejected as ambiguous`() {
+        assertNull(auth("dmarc=pass (dmarc policy=reject) header.from=agency.gov"))
+    }
+
+    @Test fun `an Exchange style policy comment without the word dmarc is accepted`() {
+        assertEquals("boss@agency.gov", auth("dmarc=pass (policy=reject) action=none header.from=agency.gov"))
+    }
+
+    @Test fun `exactly one trailing dot is removed from header from`() {
+        assertEquals("boss@agency.gov", auth("dmarc=pass header.from=agency.gov."))
+        assertNull(auth("dmarc=pass header.from=agency.gov.."))
+        assertNull(auth("dmarc=pass header.from=agency.gov..."))
+    }
+
+    @Test fun `non ASCII header from that folds to an ASCII domain is rejected`() {
+        val kelvin = "K"
+        assertNull(auth("dmarc=pass header.from=${kelvin}agency.gov", "Boss <boss@kagency.gov>"))
+        assertNull(auth("dmarc=pass header.from=agency.gov$kelvin", "Boss <boss@agency.govk>"))
+        assertNull(auth("dmarc=pass header.from=agéncy.gov", "Boss <boss@agency.gov>"))
+    }
+
+    @Test fun `upper case From and mixed case header from compare equal`() {
+        assertEquals("boss@agency.gov", auth("dmarc=pass header.from=Agency.Gov", "BOSS@AGENCY.GOV"))
+    }
+
+    @Test fun `an escaped quote does not close a quoted string and hide a forged clause`() {
+        // Four quotes, one escaped: only escape handling keeps the forged clause inside the string.
+        assertNull(auth("x=\"a\\\"; dmarc=pass header.from=agency.gov z\" \""))
+        assertNull(auth("x=\"a\\\"; dmarc=pass header.from=agency.gov z\""))
+    }
+
+    @Test fun `an escaped quote inside a legitimate quoted string is tolerated`() {
+        assertEquals("boss@agency.gov", auth("dmarc=pass reason=\"a\\\"b\" header.from=agency.gov"))
+    }
+
+    @Test fun `an escaped backslash does not escape the closing quote`() {
+        assertEquals("boss@agency.gov", auth("x=\"a\\\\\"; dmarc=pass header.from=agency.gov"))
+    }
+
+    @Test fun `an escaped parenthesis inside a comment does not close it`() {
+        assertNull(auth("(a \\) ; dmarc=pass header.from=agency.gov b) "))
+        assertEquals("boss@agency.gov", auth("dmarc=pass (a \\) b) header.from=agency.gov"))
+    }
+
+    @Test fun `nested comments hide a forged clause`() {
+        assertNull(auth("(a (b) ; dmarc=pass header.from=agency.gov c)"))
+    }
+
+    @Test fun `nested comment inside the real clause is tolerated`() {
+        assertEquals("boss@agency.gov", auth("dmarc=pass (policy (reject)) header.from=agency.gov"))
+    }
+
+    @Test fun `a stray closing parenthesis anywhere is rejected`() {
+        assertNull(auth("dmarc=pass header.from=agency.gov)"))
+        assertNull(auth(") dmarc=pass header.from=agency.gov"))
+        assertNull(auth("dmarc=pass (a)) header.from=agency.gov"))
+    }
+
+    @Test fun `unterminated quote or comment is rejected`() {
+        assertNull(auth("dmarc=pass header.from=agency.gov \"unterminated"))
+        assertNull(auth("dmarc=pass header.from=agency.gov (unterminated"))
+        assertNull(auth("dmarc=pass header.from=agency.gov (a (b) still open"))
+        assertNull(auth("dmarc=pass header.from=agency.gov \"abc\\"))
+    }
+
+    @Test fun `a longer result token ending in pass is rejected`() {
+        assertNull(auth("dmarc=bestguesspass header.from=agency.gov"))
+        assertNull(auth("dmarc=passpass header.from=agency.gov"))
     }
 
     @Test fun `a result that merely starts with pass is rejected`() {

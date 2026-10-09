@@ -17,7 +17,8 @@ import java.util.Locale
  */
 object GraphAuthentication {
     private val fold = Regex("\\r?\\n[ \\t]+")
-    private val anyDmarcSegment = Regex("(?:^|;)\\s*dmarc(?![A-Za-z0-9_])", RegexOption.IGNORE_CASE)
+    private val dmarcWord = Regex("dmarc", RegexOption.IGNORE_CASE)
+    private val asciiDomain = Regex("[A-Za-z0-9.-]+")
     private val dmarcClause = Regex("(?:^|;)\\s*dmarc=(\\w+)(?=[\\s;]|$)([^;]*)", RegexOption.IGNORE_CASE)
     private val headerFrom = Regex("(?:^|\\s)header\\.from=([^;\\s]+)", RegexOption.IGNORE_CASE)
 
@@ -26,14 +27,19 @@ object GraphAuthentication {
         val first = internetMessageHeaders.firstOrNull { it.first.equals("Authentication-Results", ignoreCase = true) }?.second
             ?: return null
         val unfolded = first.replace(fold, " ").trim()
+        // The raw value must mention "dmarc" exactly once. Stripping comments could otherwise hide
+        // a real failing clause behind a forged comment; this deliberately also rejects a header
+        // whose comment merely mentions the word (fail closed).
+        if (dmarcWord.findAll(unfolded).count() != 1) return null
         val text = stripCommentsAndQuotes(unfolded) ?: return null
-        if (anyDmarcSegment.findAll(text).count() != 1) return null
         val clause = dmarcClause.findAll(text).singleOrNull() ?: return null
         if (!clause.groupValues[1].equals("pass", ignoreCase = true)) return null
-        val asserted = headerFrom.findAll(clause.groupValues[2]).singleOrNull()?.groupValues?.get(1)
-            ?.trimEnd('.')?.lowercase(Locale.US) ?: return null
-        val fromDomain = address.substringAfter('@').trimEnd('.').lowercase(Locale.US)
-        return address.takeIf { fromDomain == asserted }
+        val rawAsserted = headerFrom.findAll(clause.groupValues[2]).singleOrNull()?.groupValues?.get(1)
+            ?.removeSuffix(".") ?: return null
+        // Checked before lowercasing: Locale folding maps U+212A (Kelvin sign) to ASCII 'k'.
+        if (!asciiDomain.matches(rawAsserted)) return null
+        // extractAddress already returns a lowercase address whose domain has no trailing dot.
+        return address.takeIf { it.substringAfter('@') == rawAsserted.lowercase(Locale.US) }
     }
 
     /** Replaces each comment or quoted string with one space; null if any is unterminated or stray. */
