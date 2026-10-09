@@ -473,8 +473,10 @@ private fun RemoteControlCard(
                     "command still requires Gmail to report an aligned DMARC pass for the sending address, so a " +
                     "forged From header is rejected no matter what's checked.\n\n" +
                     "A newly added address starts with everything checked; uncheck what it shouldn't be able " +
-                    "to do. The Gmail account you connect is authorized automatically the first time, with " +
-                    "everything checked, so this does something out of the box instead of sitting on but empty.",
+                    "to do. The Gmail account you connect is added to this list automatically the first " +
+                    "time, with everything checked. Gmail doesn't authenticate mail you send to yourself, so " +
+                    "a command sent from that same account is rejected: send commands from another address " +
+                    "and add that address here.",
                 style = MaterialTheme.typography.bodySmall,
             )
             val senders = remember(settings.remoteControlSendersJson) { RemoteControlCodec.fromJson(settings.remoteControlSendersJson) }
