@@ -10,7 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.scifsidekick.cleanroom.AppGraph
 import com.scifsidekick.cleanroom.data.EventType
-import com.scifsidekick.cleanroom.email.GmailReply
+import com.scifsidekick.cleanroom.email.MailMessage
 import com.scifsidekick.cleanroom.util.RemoteCommand
 import com.scifsidekick.cleanroom.util.RemoteCommandPlanner
 import com.scifsidekick.cleanroom.util.RemoteCommandQuery
@@ -112,7 +112,7 @@ class RemoteEnableWorker(
 
     private suspend fun applyEnable(
         graph: AppGraph,
-        candidate: GmailReply,
+        candidate: MailMessage,
     ) {
         graph.repository.setForwarding(true)
         graph.repository.recordEvent(

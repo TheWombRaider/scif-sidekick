@@ -20,50 +20,6 @@ import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
-data class GmailReply(
-    val id: String,
-    val threadId: String,
-    val subject: String,
-    val body: String,
-    val referencedMessageIds: Set<String>,
-    val rfcMessageId: String,
-    // The raw `From` header, exactly as Gmail returned it -- may be a bare address or a
-    // "Display Name <address>" form; see ComposeAuthorization.extractAddress.
-    val fromHeader: String,
-    val authenticatedFromAddress: String?,
-    // Body and image data are deliberately absent from the metadata poll. They are fetched only
-    // after ForwardingService has verified this message's route and authenticated sender.
-    val imageMimeType: String? = null,
-    val imageBytes: ByteArray? = null,
-)
-
-/** [candidates] are newest first; [unreadable] are ids whose headers couldn't be fetched or parsed. */
-data class RemoteCommandScan(
-    val candidates: List<GmailReply>,
-    val unreadable: List<String>,
-)
-
-data class GmailPollResult(
-    val replies: List<GmailReply>,
-    val fetchFailures: List<String>,
-)
-
-data class GmailDeliveryReceipt(
-    val messageId: String,
-    val threadId: String,
-    val rfcMessageId: String,
-    val reconciled: Boolean,
-)
-
-/** One inbox message that looks like a delivery-status notification and quotes at least one of
- *  this installation's own RFC Message-IDs somewhere in its content -- see
- *  [GmailGateway.checkForBounces]. */
-data class BounceNotice(
-    val gmailMessageId: String,
-    val referencedRfcMessageIds: Set<String>,
-    val summary: String,
-)
-
 class GmailGateway(
     private val oauth: GmailOAuthManager,
     private val debug: DebugControls,
@@ -104,11 +60,11 @@ class GmailGateway(
         attachmentPaths: List<String>,
         deliveryKey: String,
         verifyPriorDelivery: Boolean,
-    ): GmailDeliveryReceipt {
+    ): MailReceipt {
         if (debug.consumeForcedFailure()) throw GmailApiException(503, "Debug-injected send failure")
         val rfcMessageId = MimeMessageBuilder.rfcMessageId(deliveryKey)
         if (debug.fakeEmailTransport) {
-            return GmailDeliveryReceipt(
+            return MailReceipt(
                 messageId = "debug-$deliveryKey",
                 threadId = "debug-$deliveryKey",
                 rfcMessageId = rfcMessageId,
@@ -138,7 +94,7 @@ class GmailGateway(
                     .build(),
             )
         val sent = JSONObject(response)
-        return GmailDeliveryReceipt(
+        return MailReceipt(
             messageId = sent.getString("id"),
             threadId = sent.getString("threadId"),
             rfcMessageId = rfcMessageId,
@@ -161,8 +117,8 @@ class GmailGateway(
      * repeats before they're ever fetched, and Gmail's own list ordering surfaces genuinely new
      * matches on the first page regardless of how much older history also matches.
      */
-    suspend fun unreadReplies(knownMessageIds: Set<String> = emptySet()): GmailPollResult {
-        if (!oauth.isAuthorized || debug.fakeEmailTransport) return GmailPollResult(emptyList(), emptyList())
+    suspend fun unreadReplies(knownMessageIds: Set<String> = emptySet()): MailPollResult {
+        if (!oauth.isAuthorized || debug.fakeEmailTransport) return MailPollResult(emptyList(), emptyList())
         val token = oauth.freshAccessToken()
         val now = System.currentTimeMillis()
         // The search below can page through thousands of already-seen matches, so it only runs
@@ -173,7 +129,7 @@ class GmailGateway(
         val check = if (cursor != null && now - lastFullSweepMs < FULL_SWEEP_INTERVAL_MS) inboxChangesSince(token, cursor) else null
         if (check != null && !check.changed) {
             historyCursor = check.latestHistoryId
-            return GmailPollResult(emptyList(), emptyList())
+            return MailPollResult(emptyList(), emptyList())
         }
         val fullSweep = check == null
         // Captured before searching so anything arriving mid-search is seen by the next poll.
@@ -192,7 +148,7 @@ class GmailGateway(
     )
 
     private data class SearchOutcome(
-        val poll: GmailPollResult,
+        val poll: MailPollResult,
         val capped: Boolean,
     )
 
@@ -242,7 +198,7 @@ class GmailGateway(
         knownMessageIds: Set<String>,
         maxPages: Int,
     ): SearchOutcome {
-        val replies = mutableListOf<GmailReply>()
+        val replies = mutableListOf<MailMessage>()
         val failures = mutableListOf<String>()
         val query = URLEncoder.encode("in:inbox newer_than:90d {subject:SCIF subject:TEXT}", Charsets.UTF_8.name())
         var pageToken: String? = null
@@ -264,7 +220,7 @@ class GmailGateway(
             for (index in 0 until messages.length()) {
                 val id = messages.getJSONObject(index).getString("id")
                 if (id in knownMessageIds) continue
-                if (fetchedCandidates >= MAX_NEW_CANDIDATES_PER_POLL) return SearchOutcome(GmailPollResult(replies, failures), capped = true)
+                if (fetchedCandidates >= MAX_NEW_CANDIDATES_PER_POLL) return SearchOutcome(MailPollResult(replies, failures), capped = true)
                 fetchedCandidates++
                 try {
                     replies += fetchMetadata(token, id)
@@ -277,9 +233,9 @@ class GmailGateway(
                 }
             }
             pageToken = page.optString("nextPageToken").takeIf { it.isNotBlank() }
-            if (pageToken == null) return SearchOutcome(GmailPollResult(replies, failures), capped = false)
+            if (pageToken == null) return SearchOutcome(MailPollResult(replies, failures), capped = false)
         }
-        return SearchOutcome(GmailPollResult(replies, failures), capped = false)
+        return SearchOutcome(MailPollResult(replies, failures), capped = false)
     }
 
     /**
@@ -294,10 +250,10 @@ class GmailGateway(
      * a command email is always a fresh, top-level message with no prior thread of this app's own
      * to land back inside of. Up to [RemoteCommandPlanner.MAX_CANDIDATES] matches are fetched, newest first, so
      * a pile of unauthorized or malformed mail can't hide a real command; one message that can't
-     * be parsed is reported in [RemoteCommandScan.unreadable] instead of failing the rest.
+     * be parsed is reported in [CommandScan.unreadable] instead of failing the rest.
      */
-    suspend fun findRemoteCommands(query: String): RemoteCommandScan {
-        if (!oauth.isAuthorized || debug.fakeEmailTransport) return RemoteCommandScan(emptyList(), emptyList())
+    suspend fun findRemoteCommands(query: String): CommandScan {
+        if (!oauth.isAuthorized || debug.fakeEmailTransport) return CommandScan(emptyList(), emptyList())
         val token = oauth.freshAccessToken()
         val encoded = URLEncoder.encode(query, Charsets.UTF_8.name())
         val listJson =
@@ -314,7 +270,7 @@ class GmailGateway(
                     .build(),
             )
         val messages = JSONObject(listJson).optJSONArray("messages") ?: JSONArray()
-        val replies = mutableListOf<GmailReply>()
+        val replies = mutableListOf<MailMessage>()
         val unreadable = mutableListOf<String>()
         for (index in 0 until messages.length()) {
             val id = messages.getJSONObject(index).getString("id")
@@ -328,7 +284,7 @@ class GmailGateway(
                 unreadable += id
             }
         }
-        return RemoteCommandScan(replies, unreadable)
+        return CommandScan(replies, unreadable)
     }
 
     /**
@@ -445,7 +401,7 @@ class GmailGateway(
     private suspend fun findSentByRfcMessageId(
         token: String,
         rfcMessageId: String,
-    ): GmailDeliveryReceipt? {
+    ): MailReceipt? {
         val query = URLEncoder.encode("in:sent rfc822msgid:<$rfcMessageId>", Charsets.UTF_8.name())
         val json =
             executeAuthorized(
@@ -460,7 +416,7 @@ class GmailGateway(
         val messages = JSONObject(json).optJSONArray("messages") ?: return null
         if (messages.length() == 0) return null
         val match = messages.getJSONObject(0)
-        return GmailDeliveryReceipt(
+        return MailReceipt(
             messageId = match.getString("id"),
             threadId = match.getString("threadId"),
             rfcMessageId = rfcMessageId,
@@ -487,7 +443,7 @@ class GmailGateway(
     private suspend fun fetchMetadata(
         token: String,
         id: String,
-    ): GmailReply {
+    ): MailMessage {
         val json =
             executeAuthorized(
                 token,
@@ -515,7 +471,7 @@ class GmailGateway(
                 .toSet()
         val fromHeader = headers(headers, "From").singleOrNull().orEmpty()
         val authenticationResults = headers(headers, "Authentication-Results")
-        return GmailReply(
+        return MailMessage(
             id = id,
             threadId = root.getString("threadId"),
             subject = subject,
@@ -529,7 +485,7 @@ class GmailGateway(
 
     /** Called only for an already-authorized command. Full MIME content and attachment bytes are
      *  intentionally outside the broad inbox poll's attack surface. */
-    suspend fun fetchContent(reply: GmailReply): GmailReply {
+    suspend fun fetchContent(reply: MailMessage): MailMessage {
         val token = oauth.freshAccessToken()
         val json =
             executeAuthorized(

@@ -17,7 +17,7 @@ import com.scifsidekick.cleanroom.data.EventType
 import com.scifsidekick.cleanroom.data.ForwardingStateEntity
 import com.scifsidekick.cleanroom.data.QueueChannel
 import com.scifsidekick.cleanroom.data.QueueCapacityException
-import com.scifsidekick.cleanroom.email.GmailReply
+import com.scifsidekick.cleanroom.email.MailMessage
 import com.scifsidekick.cleanroom.messaging.IncomingMessageReceiver
 import com.scifsidekick.cleanroom.util.PhoneNumbers
 import com.scifsidekick.cleanroom.util.PremiumNumbers
@@ -485,7 +485,7 @@ class ForwardingService : Service() {
                     "A delivery-failure notice arrived but could not be matched to a message this app sent: ${notice.summary}",
                 )
             }
-            markGmailMessageRead(notice.gmailMessageId)
+            markGmailMessageRead(notice.messageId)
         }
         if (notices.isNotEmpty()) graph.alerts.showDeliveryReviewRequired(notices.size)
     }
@@ -533,7 +533,7 @@ class ForwardingService : Service() {
      * still starts forwarding from that moment and never backfills what arrived in between.
      */
     private suspend fun handleRemoteDisableCommand(
-        reply: GmailReply,
+        reply: MailMessage,
         settings: AppSettingsEntity,
     ) {
         graph.repository.recordIgnoredGmailCandidate(reply.id)

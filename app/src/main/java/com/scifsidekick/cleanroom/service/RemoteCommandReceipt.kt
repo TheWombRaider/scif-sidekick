@@ -4,7 +4,7 @@ import android.content.Context
 import com.scifsidekick.cleanroom.AppGraph
 import com.scifsidekick.cleanroom.BuildConfig
 import com.scifsidekick.cleanroom.data.EventType
-import com.scifsidekick.cleanroom.email.GmailReply
+import com.scifsidekick.cleanroom.email.MailMessage
 import com.scifsidekick.cleanroom.util.RemoteCommand
 
 /**
@@ -49,7 +49,7 @@ object RemoteCommandReceipt {
         context: Context,
         graph: AppGraph,
         command: RemoteCommand,
-        candidate: GmailReply,
+        candidate: MailMessage,
         serviceStart: ServiceStart? = null,
     ) {
         val recipient = candidate.authenticatedFromAddress ?: return

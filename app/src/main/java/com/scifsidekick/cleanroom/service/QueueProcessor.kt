@@ -16,7 +16,7 @@ import com.scifsidekick.cleanroom.data.SentGmailMessageEntity
 import com.scifsidekick.cleanroom.data.SidekickDatabase
 import com.scifsidekick.cleanroom.data.SidekickRepository
 import com.scifsidekick.cleanroom.data.TelephonyPartResultEntity
-import com.scifsidekick.cleanroom.email.GmailDeliveryReceipt
+import com.scifsidekick.cleanroom.email.MailReceipt
 import com.scifsidekick.cleanroom.email.GmailGateway
 import com.scifsidekick.cleanroom.email.ReauthorizationRequiredException
 import com.scifsidekick.cleanroom.messaging.EmailPayload
@@ -703,7 +703,7 @@ class QueueProcessor(
     private data class DeliveryOutcome(
         val detail: String,
         val emailPayload: EmailPayload? = null,
-        val emailReceipt: GmailDeliveryReceipt? = null,
+        val emailReceipt: MailReceipt? = null,
         val awaitingTelephonyResult: Boolean = false,
     )
 

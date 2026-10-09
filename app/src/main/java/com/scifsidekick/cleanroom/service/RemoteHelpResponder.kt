@@ -5,7 +5,7 @@ import com.scifsidekick.cleanroom.BuildConfig
 import com.scifsidekick.cleanroom.data.AppSettingsEntity
 import com.scifsidekick.cleanroom.data.EventType
 import com.scifsidekick.cleanroom.data.QueueChannel
-import com.scifsidekick.cleanroom.email.GmailReply
+import com.scifsidekick.cleanroom.email.MailMessage
 import com.scifsidekick.cleanroom.ui.CommandHelp
 import com.scifsidekick.cleanroom.util.RemoteControlCodec
 import com.scifsidekick.cleanroom.util.suspendRunCatching
@@ -115,7 +115,7 @@ object RemoteHelpManual {
 object RemoteHelpResponder {
     suspend fun answer(
         graph: AppGraph,
-        candidate: GmailReply,
+        candidate: MailMessage,
         settings: AppSettingsEntity,
         drainAfterQueueing: Boolean,
     ) {
