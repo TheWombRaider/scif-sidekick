@@ -32,11 +32,29 @@ class FakeMailTransport(
     @Volatile var signedIn: Boolean = true
     val sent = mutableListOf<SentRecord>()
     var failNextSendWith: Exception? = null
+
+    /** Thrown by every [pollReplies] while set. */
+    var pollFailure: Exception? = null
+
+    /** Thrown by every [findSent] while set. */
+    var findSentFailure: Exception? = null
+
+    /** Returned as [CommandScan.unreadable] by [findCommands]. */
+    val unreadableCommands = mutableListOf<String>()
+
+    /** Every call made to this transport, in order: the method name, plus `:<id>` for [markRead] and [fetchContent]. */
+    val calls = mutableListOf<String>()
+
+    /** Number of [send] calls, including failed ones. */
+    val sendCount: Int get() = calls.count { it == "send" }
     private val inbox = mutableListOf<Stored>()
 
     override val isAvailable: Boolean get() = signedIn
 
-    override suspend fun accountEmail(): String? = if (signedIn) "owner@fake.invalid" else null
+    override suspend fun accountEmail(): String? {
+        calls += "accountEmail"
+        return if (signedIn) "owner@fake.invalid" else null
+    }
 
     override suspend fun send(
         payload: EmailPayload,
@@ -44,6 +62,7 @@ class FakeMailTransport(
         deliveryKey: String,
         verifyPriorDelivery: Boolean,
     ): MailReceipt {
+        calls += "send"
         if (!signedIn) throw MailAuthRequiredException("Open the app and reconnect $displayName", providerId, displayName)
         failNextSendWith?.let {
             failNextSendWith = null
@@ -65,17 +84,22 @@ class FakeMailTransport(
     }
 
     override suspend fun findSent(deliveryKey: String): MailReceipt? {
+        calls += "findSent"
         if (!signedIn) return null
+        findSentFailure?.let { throw it }
         val rfc = MimeMessageBuilder.rfcMessageId(deliveryKey)
         return sent.firstOrNull { it.receipt.rfcMessageId == rfc }?.receipt?.copy(reconciled = true)
     }
 
     override suspend fun pollReplies(knownMessageIds: Set<String>): MailPollResult {
+        calls += "pollReplies"
         if (!signedIn) return MailPollResult(emptyList(), emptyList())
+        pollFailure?.let { throw it }
         return MailPollResult(inbox.filter { it.message.id !in knownMessageIds }.map { it.message }, emptyList())
     }
 
     override suspend fun findCommands(search: CommandSearch): CommandScan {
+        calls += "findCommands"
         if (!signedIn) return CommandScan(emptyList(), emptyList())
         val found =
             inbox
@@ -86,21 +110,28 @@ class FakeMailTransport(
                         (search.senders.isEmpty() || stored.message.fromHeader.lowercase() in search.senders)
                 }.take(RemoteCommandPlanner.MAX_CANDIDATES)
                 .map { it.message }
-        return CommandScan(found, emptyList())
+        return CommandScan(found, unreadableCommands.toList())
     }
 
     override suspend fun fetchContent(message: MailMessage): MailMessage {
+        calls += "fetchContent:${message.id}"
         val stored = inbox.firstOrNull { it.message.id == message.id }?.message ?: message
         return stored.copy(body = "body of ${message.id}")
     }
 
     override suspend fun markRead(messageId: String) {
+        calls += "markRead:$messageId"
         inbox.firstOrNull { it.message.id == messageId }?.unread = false
     }
 
-    override suspend fun checkForBounces(): List<BounceNotice> = emptyList()
+    override suspend fun checkForBounces(): List<BounceNotice> {
+        calls += "checkForBounces"
+        return emptyList()
+    }
 
-    override fun clearSession() = Unit
+    override fun clearSession() {
+        calls += "clearSession"
+    }
 
     /**
      * Test control: put a message in the inbox and return its provider-scoped id (see [MailIds]).
