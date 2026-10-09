@@ -1,6 +1,6 @@
 package com.scifsidekick.cleanroom
 
-import com.scifsidekick.cleanroom.util.GmailAuthentication
+import com.scifsidekick.cleanroom.email.GmailAuthentication
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

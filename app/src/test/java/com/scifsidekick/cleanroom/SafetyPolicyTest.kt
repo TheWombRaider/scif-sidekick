@@ -14,7 +14,7 @@ import com.scifsidekick.cleanroom.service.CircuitPolicy
 import com.scifsidekick.cleanroom.service.HardRateLimits
 import com.scifsidekick.cleanroom.util.ComposeAuthorization
 import com.scifsidekick.cleanroom.util.FilterConditionEvaluator
-import com.scifsidekick.cleanroom.util.GmailAuthentication
+import com.scifsidekick.cleanroom.email.GmailAuthentication
 import com.scifsidekick.cleanroom.util.MessageTemplateEngine
 import com.scifsidekick.cleanroom.util.MessageVariables
 import com.scifsidekick.cleanroom.util.OtpDetector

@@ -3,7 +3,6 @@ package com.scifsidekick.cleanroom.email
 import android.text.Html
 import com.scifsidekick.cleanroom.messaging.EmailPayload
 import com.scifsidekick.cleanroom.util.AttachmentStore
-import com.scifsidekick.cleanroom.util.GmailAuthentication
 import com.scifsidekick.cleanroom.util.RemoteCommandPlanner
 import com.scifsidekick.cleanroom.util.base64UrlDecode
 import com.scifsidekick.cleanroom.util.base64UrlDecodeBytes
@@ -515,7 +514,7 @@ class GmailGateway(
      *  This walks the part tree iteratively with a visited-node ceiling rather than recursing,
      *  and that's deliberate, not just style: every message this app's *own* subject search
      *  matches gets its full structure fetched and walked here before the authorized-sender
-     *  check ever runs (unreadReplies casts a deliberately wide net -- see its own comment), so
+     *  check ever runs (pollReplies casts a deliberately wide net -- see its own comment), so
      *  an attacker who is never going to pass authorization can still hand this a crafted,
      *  pathologically deep or wide multipart structure. An unbounded recursive walk over that is
      *  a StackOverflowError waiting to happen -- and Error, unlike Exception, is *not* caught by
