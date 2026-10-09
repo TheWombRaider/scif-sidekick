@@ -226,6 +226,6 @@ class GmailOAuthManager(
     }
 }
 
-class ReauthorizationRequiredException : Exception("Open the app and reconnect Gmail")
+class ReauthorizationRequiredException : MailAuthRequiredException("Open the app and reconnect Gmail")
 
 class PubSubConsentRequiredException : Exception("Tap \"Grant push access\" in Settings to allow Pub/Sub access for Gmail push (beta)")

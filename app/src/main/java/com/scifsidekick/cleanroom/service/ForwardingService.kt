@@ -66,7 +66,7 @@ class ForwardingService : Service() {
                 if (graph.database
                         .stateDao()
                         .get()
-                        ?.enabled == true && !graph.gmail.isAvailable
+                        ?.enabled == true && !graph.mail.isAvailable
                 ) {
                     graph.alerts.showAuthorizationRequired()
                 }
@@ -231,27 +231,27 @@ class ForwardingService : Service() {
     private suspend fun pollReplies() {
         val result =
             try {
-                graph.gmail.pollReplies(graph.repository.recentProcessedGmailIds())
-            } catch (required: com.scifsidekick.cleanroom.email.ReauthorizationRequiredException) {
+                graph.mail.pollReplies(graph.repository.recentProcessedGmailIds())
+            } catch (required: com.scifsidekick.cleanroom.email.MailAuthRequiredException) {
                 graph.alerts.showAuthorizationRequired()
                 graph.repository.recordEvent(
                     EventType.AUTH_REQUIRED,
-                    "Gmail reply polling paused until the user reconnects",
+                    "${graph.mail.displayName} reply polling paused until the user reconnects",
                 )
                 return
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                if (graph.oauth.isAuthorized) {
+                if (graph.mail.isAvailable) {
                     graph.repository.recordServiceEvent(
-                        "Gmail reply poll failed: ${(failure.message ?: failure.javaClass.simpleName).take(500)}",
+                        "${graph.mail.displayName} reply poll failed: ${(failure.message ?: failure.javaClass.simpleName).take(500)}",
                     )
                 }
                 return
             }
 
         result.fetchFailures.forEach { failure ->
-            graph.repository.recordServiceEvent("Gmail reply could not be parsed or fetched: $failure")
+            graph.repository.recordServiceEvent("${graph.mail.displayName} reply could not be parsed or fetched: $failure")
         }
         val settings = graph.repository.currentAppSettings()
         result.replies.forEach { reply ->
@@ -361,19 +361,19 @@ class ForwardingService : Service() {
 
             val content =
                 try {
-                    graph.gmail.fetchContent(reply)
-                } catch (required: com.scifsidekick.cleanroom.email.ReauthorizationRequiredException) {
+                    graph.mail.fetchContent(reply)
+                } catch (required: com.scifsidekick.cleanroom.email.MailAuthRequiredException) {
                     graph.alerts.showAuthorizationRequired()
                     graph.repository.recordEvent(
                         EventType.AUTH_REQUIRED,
-                        "Gmail reply content could not be fetched until the account is reconnected",
+                        "${graph.mail.displayName} reply content could not be fetched until the account is reconnected",
                     )
                     return@forEach
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (failure: Exception) {
                     graph.repository.recordServiceEvent(
-                        "Authorized Gmail reply content could not be fetched: ${(failure.message ?: failure.javaClass.simpleName).take(300)}",
+                        "Authorized ${graph.mail.displayName} reply content could not be fetched: ${(failure.message ?: failure.javaClass.simpleName).take(300)}",
                     )
                     return@forEach
                 }
@@ -462,8 +462,8 @@ class ForwardingService : Service() {
     private suspend fun checkBounces() {
         val notices =
             try {
-                graph.gmail.checkForBounces()
-            } catch (required: com.scifsidekick.cleanroom.email.ReauthorizationRequiredException) {
+                graph.mail.checkForBounces()
+            } catch (required: com.scifsidekick.cleanroom.email.MailAuthRequiredException) {
                 // The reply poll already surfaces reauthorization; avoid a second, redundant alert.
                 return
             } catch (cancelled: CancellationException) {
@@ -505,7 +505,7 @@ class ForwardingService : Service() {
             if (graph.gmailPush.pollPush(settings.pubsubSubscriptionName)) {
                 lastReplyPollMs = 0L
             }
-        } catch (required: com.scifsidekick.cleanroom.email.ReauthorizationRequiredException) {
+        } catch (required: com.scifsidekick.cleanroom.email.MailAuthRequiredException) {
             // The reply poll already surfaces reauthorization; avoid a second, redundant alert.
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -568,10 +568,10 @@ class ForwardingService : Service() {
     }
 
     private suspend fun markGmailMessageRead(messageId: String) {
-        suspendRunCatching { graph.gmail.markRead(messageId) }
+        suspendRunCatching { graph.mail.markRead(messageId) }
             .onFailure { failure ->
                 graph.repository.recordServiceEvent(
-                    "Could not mark Gmail reply $messageId read: ${(failure.message ?: failure.javaClass.simpleName).take(500)}",
+                    "Could not mark ${graph.mail.displayName} reply $messageId read: ${(failure.message ?: failure.javaClass.simpleName).take(500)}",
                 )
             }
     }
@@ -586,7 +586,7 @@ class ForwardingService : Service() {
      *  post costs one cheap in-memory comparison instead. */
     private suspend fun updateNotification(state: ForwardingStateEntity?) {
         val queued = graph.database.queueDao().queuedCount()
-        val gmailAvailable = graph.gmail.isAvailable
+        val gmailAvailable = graph.mail.isAvailable
         val key = Triple(state, queued, gmailAvailable)
         if (key == lastPostedNotificationKey) return
         lastPostedNotificationKey = key

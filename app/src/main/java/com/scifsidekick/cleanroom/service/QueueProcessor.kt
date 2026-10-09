@@ -16,9 +16,9 @@ import com.scifsidekick.cleanroom.data.SentGmailMessageEntity
 import com.scifsidekick.cleanroom.data.SidekickDatabase
 import com.scifsidekick.cleanroom.data.SidekickRepository
 import com.scifsidekick.cleanroom.data.TelephonyPartResultEntity
+import com.scifsidekick.cleanroom.email.MailAuthRequiredException
 import com.scifsidekick.cleanroom.email.MailReceipt
-import com.scifsidekick.cleanroom.email.GmailGateway
-import com.scifsidekick.cleanroom.email.ReauthorizationRequiredException
+import com.scifsidekick.cleanroom.email.MailTransport
 import com.scifsidekick.cleanroom.messaging.EmailPayload
 import com.scifsidekick.cleanroom.messaging.MmsGateway
 import com.scifsidekick.cleanroom.messaging.PermanentDeliveryException
@@ -35,7 +35,7 @@ class QueueProcessor(
     private val db: SidekickDatabase,
     private val repository: SidekickRepository,
     private val limiter: RollingRateLimiter,
-    private val gmail: GmailGateway,
+    private val mail: MailTransport,
     private val sms: SmsGateway,
     private val mms: MmsGateway,
     private val attachments: AttachmentStore,
@@ -315,7 +315,7 @@ class QueueProcessor(
         repeat(maxBatch) {
             if (channel == QueueChannel.EMAIL) {
                 if (db.stateDao().get()?.emailCircuitOpen == true) return
-                if (!gmail.isAvailable) return
+                if (!mail.isAvailable) return
             }
             val now = System.currentTimeMillis()
             val item = db.queueDao().nextReady(channel, now) ?: return
@@ -421,7 +421,7 @@ class QueueProcessor(
         val outcome =
             try {
                 performDelivery(item, attemptId)
-            } catch (required: ReauthorizationRequiredException) {
+            } catch (required: MailAuthRequiredException) {
                 pauseForAuthorization(item, attemptId, required)
                 return
             } catch (permanent: PermanentDeliveryException) {
@@ -457,7 +457,7 @@ class QueueProcessor(
                     ),
                 )
                 val receipt =
-                    gmail.send(
+                    mail.send(
                         payload = payload,
                         attachmentPaths = attachmentPaths,
                         deliveryKey = deliveryKey,
@@ -466,9 +466,9 @@ class QueueProcessor(
                 DeliveryOutcome(
                     detail =
                         if (receipt.reconciled) {
-                            "Previously accepted Gmail message reconciled; duplicate send suppressed"
+                            "Previously accepted ${mail.displayName} message reconciled; duplicate send suppressed"
                         } else {
-                            "Gmail message ${receipt.messageId} accepted"
+                            "${mail.displayName} message ${receipt.messageId} accepted"
                         },
                     emailPayload = payload,
                     emailReceipt = receipt,
@@ -615,14 +615,14 @@ class QueueProcessor(
         attemptId: Long,
         failure: Exception,
     ) {
-        val detail = (failure.message ?: "Gmail authorization is required").take(1_000)
+        val detail = (failure.message ?: "${mail.displayName} authorization is required").take(1_000)
         db.withTransaction {
             db.deliveryAttemptDao().finish(attemptId, false, detail)
             db.queueDao().defer(item.id, System.currentTimeMillis() + AUTHORIZATION_RETRY_DELAY_MS)
             db.eventLogDao().insert(
                 EventLogEntity(
                     type = EventType.AUTH_REQUIRED,
-                    reason = "Gmail authorization requires user interaction; email queue paused",
+                    reason = "${mail.displayName} authorization requires user interaction; email queue paused",
                     queueId = item.id,
                 ),
             )

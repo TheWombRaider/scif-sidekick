@@ -120,7 +120,7 @@ object RemoteHelpResponder {
         drainAfterQueueing: Boolean,
     ) {
         // Read before any early return, for the same reason as the status responder.
-        suspendRunCatching { graph.gmail.markRead(candidate.id) }
+        suspendRunCatching { graph.mail.markRead(candidate.id) }
         if (!settings.remoteControlEnabled) return
 
         if (!RemoteControlCodec.isListed(settings.remoteControlSendersJson, candidate.authenticatedFromAddress)) {

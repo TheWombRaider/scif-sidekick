@@ -60,7 +60,7 @@ object RemoteCommandReceipt {
                 RemoteCommand.STATUS, RemoteCommand.HELP -> return
             }
         val now = System.currentTimeMillis()
-        val summary = graph.repository.buildStatusSummary(graph.gmail.isAvailable, now)
+        val summary = graph.repository.buildStatusSummary(graph.mail.isAvailable, now)
         val queued =
             graph.repository.enqueueSystemEmail(
                 recipients = listOf(recipient),

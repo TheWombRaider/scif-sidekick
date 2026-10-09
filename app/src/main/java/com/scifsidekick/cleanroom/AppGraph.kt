@@ -35,7 +35,7 @@ class AppGraph private constructor(
             database,
             repository,
             RollingRateLimiter(database.deliveryAttemptDao()),
-            gmail,
+            mail,
             SmsGateway(app),
             MmsGateway(app),
             attachments,

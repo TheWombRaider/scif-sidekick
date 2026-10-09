@@ -29,7 +29,7 @@ object RemoteStatusResponder {
     ) {
         // Read before any early return: a rejected or disabled query must still be consumed, or it
         // sits unread and is re-evaluated on every single tick for the next two days.
-        suspendRunCatching { graph.gmail.markRead(candidate.id) }
+        suspendRunCatching { graph.mail.markRead(candidate.id) }
         if (!settings.remoteControlEnabled) return
 
         val authorized =
@@ -48,7 +48,7 @@ object RemoteStatusResponder {
         }
 
         val now = System.currentTimeMillis()
-        val summary = graph.repository.buildStatusSummary(graph.gmail.isAvailable, now)
+        val summary = graph.repository.buildStatusSummary(graph.mail.isAvailable, now)
         val queued =
             graph.repository.enqueueSystemEmail(
                 recipients = listOfNotNull(candidate.authenticatedFromAddress),

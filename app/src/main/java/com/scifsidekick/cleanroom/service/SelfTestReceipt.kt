@@ -44,9 +44,9 @@ object SelfTestReceipt {
     ): Outcome {
         // The override exists for the instrumented test, which runs on the fake transport with no
         // Gmail account to read an address from. The UI never passes it.
-        val recipient = recipientOverride ?: graph.gmail.accountEmail() ?: return Outcome.NotConnected
+        val recipient = recipientOverride ?: graph.mail.accountEmail() ?: return Outcome.NotConnected
         val now = System.currentTimeMillis()
-        val summary = graph.repository.buildStatusSummary(graph.gmail.isAvailable, now)
+        val summary = graph.repository.buildStatusSummary(graph.mail.isAvailable, now)
         val queued =
             graph.repository.enqueueSystemEmail(
                 recipients = listOf(recipient),

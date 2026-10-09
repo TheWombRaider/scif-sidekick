@@ -59,7 +59,7 @@ class HeartbeatEmailWorker(
         // rather than being silently dropped now. The marker is only advanced once the row is
         // actually queued, so a refused enqueue retries on the next tick instead of skipping a
         // whole interval.
-        val summary = graph.repository.buildStatusSummary(graph.gmail.isAvailable, now)
+        val summary = graph.repository.buildStatusSummary(graph.mail.isAvailable, now)
         val queueId =
             graph.repository.enqueueSystemEmail(
                 recipients = recipients,
