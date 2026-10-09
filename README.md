@@ -52,7 +52,7 @@ Personal phones can't go into a SCIF, which leaves you out of reach for hours at
 
 1. **Build and install** the app (see [Build](#-build) and [Install](#-install)).
 2. **Grant permissions**: SMS, MMS, contacts (optional), notifications.
-3. **Allow notification access** in the *RCS coverage* card so Google Messages and Samsung Messages chats are picked up.
+3. **Allow notification access** in the *RCS coverage* card (Settings) so Google Messages and Samsung Messages chats, and missed calls, are picked up.
 4. **Allow reliable background operation** and approve the battery exemption.
 5. **Connect Gmail** (one-time [Google Cloud setup](#-gmail-setup)).
 6. **Add a filter** from the menu with at least one recipient.
@@ -70,8 +70,8 @@ Everything below is done from any email client. Put the command in the **subject
 |---|---|---|---|---|
 | **Send a text** | `TEXT+15551234567` | Your message | Texts that number. Attach a photo to send an MMS. | Nothing, it's a text |
 | **Reply to a text** | Hit *Reply* on a forward. Leave the `[SCIF:+15551234567]` tag alone. | Your reply | Texts the original sender | Nothing, it's a text |
-| **Forwarding on** | `[SCIF:ON]` | ignored | Turns forwarding on, even if the app is idle | ✅ "Forwarding ENABLED" receipt plus status |
-| **Forwarding off** | `[SCIF:OFF]` | ignored | Turns forwarding off | ✅ "Forwarding DISABLED" receipt plus status |
+| **Forwarding on** | `[SCIF:ON]` | ignored | Turns forwarding on, even if the app is idle | ✅ "forwarding ENABLED" receipt plus status |
+| **Forwarding off** | `[SCIF:OFF]` | ignored | Turns forwarding off | ✅ "forwarding DISABLED" receipt plus status |
 | **Status** | `[SCIF:STATUS]` | ignored | Changes nothing | 📊 On/off, service health, Gmail auth, queue depth |
 | **Help** | `[SCIF:HELP]` | ignored | Changes nothing | 📖 A man-page-style manual of every command and its syntax |
 
@@ -90,16 +90,15 @@ Everything below is done from any email client. Put the command in the **subject
 - A text can be at most 1,600 characters and 10 SMS segments, whichever limit is hit first: about 1,500 plain characters, or about 670 with emoji or non-Latin letters. Longer or blank messages are blocked.
 - Only the new part of your reply is sent. Quoted history is stripped.
 - For `[SCIF:ON]`, `[SCIF:OFF]`, `[SCIF:STATUS]` and `[SCIF:HELP]` the tag can sit anywhere in the subject, so a `Re:` or `Fwd:` prefix is fine.
-- A subject containing more than one command tag, such as `[SCIF:ON]` and `[SCIF:OFF]`, is ignored as ambiguous.
+- A subject containing two different command tags, such as `[SCIF:ON]` and `[SCIF:OFF]`, is ignored as ambiguous.
 
 **How it stays safe**
 
-- 🔑 Each address in **Settings → Remote control by email** has its own checkboxes for *Compose, Enable, Disable, Status*. Trusting someone for one never implies another. A new address starts with all four checked, so untick what they shouldn't have. `[SCIF:HELP]` needs no checkbox: it changes nothing, so any address on the list can ask for it.
+- 🔑 Each address in **Settings → Remote control by email** has its own checkboxes for *Compose, Enable, Disable, Status*. Trusting someone for one never implies another. A new address starts with all four checked, so untick what they shouldn't have. The Gmail account you connect is added automatically, with all four, the first time you connect it. `[SCIF:HELP]` needs no checkbox: it changes nothing, so any address on the list can ask for it.
 - ✉️ The sender must pass Gmail's DMARC check. The visible `From` line alone is never trusted.
-- 🤐 **Unauthorized senders get no reply**, so a stranger can't use the app to confirm your mailbox is live. Rejections are logged in History as security events.
+- 🤐 **Unauthorized senders get no reply**, so a stranger can't use the app to confirm your mailbox is live. Rejections are logged in Activity as security events.
 - 🧾 Receipts read the state back after the change, so they report what happened, not what was asked.
-- 🔕 One master switch turns all of it off.
-
+- 🔕 One master switch (on by default) turns all of it off.
 
 ---
 
@@ -156,8 +155,8 @@ The APK lands at `app/build/outputs/apk/debug/app-debug.apk`.
 | **RCS** | Captured from Google/Samsung Messages notifications. Muted or hidden notifications can't be forwarded. Keep RCS enabled. |
 | **Android 17 OTPs** | The OS can withhold one-time-passcode SMS from apps for up to 3 hours. Don't rely on this for time-critical codes. |
 | **MMS out** | Unverified against real carriers. Images are downscaled conservatively. |
-| **Privacy** | Message payloads live in an on-device database and are pruned after 30 days. Android backups are off. *Settings → Hide app content in Recents* blanks the app in the recent-apps screen and blocks screenshots. Your mail goes to Google and your chosen recipients, so secure that mailbox. |
-| **Known gaps** | The interface is English only, and it hasn't been checked with TalkBack, the largest font sizes or for colour contrast beyond the first pass; see `docs/TEST_PLAN.md` §15-16. |
+| **Privacy** | Message payloads live in an on-device database and are pruned after 30 days by default (*Settings → Retention*). Android backups are off. *Settings → Hide app content in Recents* blanks the app in the recent-apps screen and blocks screenshots. Your mail goes to Google and your chosen recipients, so secure that mailbox. |
+| **Known gaps** | The interface is English only, and it hasn't been checked with TalkBack, the largest font sizes or for color contrast beyond the first pass; see `docs/TEST_PLAN.md` §15-16. |
 | **Phones only** | The app needs telephony, so tablets and Wi-Fi-only devices aren't supported. |
 | **Policy** | Your organization's rules still apply. See the notice at the top. |
 | **Play Store** | SMS permissions are restricted. This is built for sideloading. |
@@ -181,13 +180,13 @@ Signed release builds are still supported; the steps are in [RELEASING.md](RELEA
 
 | Symptom | Check |
 |---|---|
-| Nothing is forwarded | Forwarding is ON, the Gmail chip has a ✓, at least one enabled filter has a recipient, battery is *Unrestricted*. History shows why a message was skipped. |
-| A reply isn't sent as a text | Forwarding must be ON. Keep the `[SCIF:+number]` tag, reply from an address that received the forward, and look for a "Blocked" entry in History. |
-| `[SCIF:ON]` does nothing | The sending address needs *Enable*, Gmail must show a DMARC pass for it, and the mail must be unread in your inbox. Allow 15 minutes or more. |
+| Nothing is forwarded | Forwarding is ON, the Gmail chip has a ✓, at least one enabled filter has a recipient, battery is *Unrestricted*. Activity shows why a message was skipped. |
+| A reply isn't sent as a text | Forwarding must be ON. Keep the `[SCIF:+number]` tag, reply from an address that received the forward, and look for a "Blocked" entry in Activity. |
+| `[SCIF:ON]` does nothing | The sending address needs *Enable*, Gmail must show a DMARC pass for it, and the mail must be unread in your inbox and less than two days old. Allow 15 minutes or more. |
 | "Gmail connection canceled" right after tapping Connect Gmail | Google rejected the app before showing any consent screen. With the phone attached, `adb logcat` shows `status=UNREGISTERED_ON_API_CONSOLE` from `Auth.Api.Credentials`. Your OAuth client's package and SHA-1 must match the installed APK exactly (`apksigner verify --print-certs app-debug.apk`). If they already match, run `adb shell am force-stop com.google.android.gms` and try again; Google Play services can cache the earlier rejection. |
 | "Reconnect Gmail" | Open the app and tap Connect Gmail. If your Google Cloud app is still in *Testing*, publish it; those grants expire after 7 days. |
-| A command gets no reply | Remote control is on, the sender is on the list (and ticked for that command), Gmail shows a DMARC pass, and the subject has exactly one command tag. Rejections show in History. Email `[SCIF:HELP]` for the full syntax. |
-| RCS chats are missing | Notification access is on and Google/Samsung Messages notifications aren't muted. |
+| A command gets no reply | Remote control is on, the sender is on the list (and ticked for that command), Gmail shows a DMARC pass, and the subject has exactly one command tag. Rejections show in Activity. **Send test receipt** (Settings → Remote control by email) checks that replies can go out. Email `[SCIF:HELP]` for the full syntax. |
+| RCS chats or missed calls are missing | Notification access is on and the Google/Samsung Messages or phone app notifications aren't muted. |
 | You'd like to know if it stops | Turn on the Heartbeat email (Settings), then tap an address under **Add from your filters** to send it there. |
 
 ---
@@ -195,6 +194,8 @@ Signed release builds are still supported; the steps are in [RELEASING.md](RELEA
 ## 🧹 Uninstall and your data
 
 Uninstalling deletes everything the app stored on the phone (queue, history, settings). Exported backups stay where you saved them. To cut Google access, remove the app under *Google Account → Security → Third-party access* and delete the Google Cloud project you created. Forwarded emails stay in the mailboxes they were sent to until you delete them.
+
+---
 
 ## 🔎 Limits and trust
 
@@ -210,9 +211,10 @@ Uninstalling deletes everything the app stored on the phone (queue, history, set
 - [CHANGELOG.md](CHANGELOG.md): what changed in each release ([the long version](docs/CHANGELOG_DETAILED.md) has the reasoning)
 - [RELEASING.md](RELEASING.md): signing and publishing a release build
 - [docs/DESIGN_NOTES.md](docs/DESIGN_NOTES.md): safety invariants and the reasoning behind the design
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the pieces fit together
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the pieces fit together, including the provider-neutral mail transport layer
 - [docs/TEST_PLAN.md](docs/TEST_PLAN.md): device checks
 - [docs/QA_AUDIT.md](docs/QA_AUDIT.md): the 1.1.0 audit
+- [docs/superpowers/](docs/superpowers/): design specs and implementation plans for larger changes
 
 ---
 
