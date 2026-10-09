@@ -55,4 +55,9 @@ data class BounceNotice(
 data class CommandSearch(
     val tags: List<String>,
     val senders: List<String>,
-)
+) {
+    init {
+        require(tags.isNotEmpty()) { "CommandSearch needs at least one tag" }
+        require(senders.isNotEmpty()) { "CommandSearch needs at least one sender" }
+    }
+}

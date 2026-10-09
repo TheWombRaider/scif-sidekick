@@ -117,6 +117,11 @@ class GmailGateway(
      * repeats before they're ever fetched, and Gmail's own list ordering surfaces genuinely new
      * matches on the first page regardless of how much older history also matches.
      */
+    override suspend fun findSent(deliveryKey: String): MailReceipt? {
+        if (!oauth.isAuthorized || debug.fakeEmailTransport) return null
+        return findSentByRfcMessageId(oauth.freshAccessToken(), MimeMessageBuilder.rfcMessageId(deliveryKey))
+    }
+
     override suspend fun pollReplies(knownMessageIds: Set<String>): MailPollResult {
         if (!oauth.isAuthorized || debug.fakeEmailTransport) return MailPollResult(emptyList(), emptyList())
         val token = oauth.freshAccessToken()
@@ -670,6 +675,6 @@ class GmailGateway(
 }
 
 class GmailApiException(
-    val statusCode: Int,
+    statusCode: Int,
     detail: String,
-) : Exception("Gmail API HTTP $statusCode: $detail")
+) : MailHttpException(statusCode, "Gmail API HTTP $statusCode: $detail")

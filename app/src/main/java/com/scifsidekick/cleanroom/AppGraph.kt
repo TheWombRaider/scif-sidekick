@@ -26,7 +26,7 @@ class AppGraph private constructor(
     val gmail = GmailGateway(oauth, debug)
 
     /** What the rest of the app talks to. Today that is Gmail; a router replaces it in a later step. */
-    val mail: MailTransport = gmail
+    @Volatile internal var mail: MailTransport = gmail
     val gmailPush = GmailPushGateway(oauth, debug)
     val attachments = AttachmentStore(app)
     val alerts = AlertNotifier(app)

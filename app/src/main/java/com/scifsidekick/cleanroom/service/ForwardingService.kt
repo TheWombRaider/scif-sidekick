@@ -68,7 +68,7 @@ class ForwardingService : Service() {
                         .get()
                         ?.enabled == true && !graph.mail.isAvailable
                 ) {
-                    graph.alerts.showAuthorizationRequired()
+                    graph.alerts.showAuthorizationRequired(graph.mail.providerId, graph.mail.displayName)
                 }
                 while (isActive) {
                     val passStartedAtMs = System.currentTimeMillis()
@@ -233,7 +233,7 @@ class ForwardingService : Service() {
             try {
                 graph.mail.pollReplies(graph.repository.recentProcessedGmailIds())
             } catch (required: com.scifsidekick.cleanroom.email.MailAuthRequiredException) {
-                graph.alerts.showAuthorizationRequired()
+                graph.alerts.showAuthorizationRequired(required.providerId, required.displayName)
                 graph.repository.recordEvent(
                     EventType.AUTH_REQUIRED,
                     "${graph.mail.displayName} reply polling paused until the user reconnects",
@@ -363,7 +363,7 @@ class ForwardingService : Service() {
                 try {
                     graph.mail.fetchContent(reply)
                 } catch (required: com.scifsidekick.cleanroom.email.MailAuthRequiredException) {
-                    graph.alerts.showAuthorizationRequired()
+                    graph.alerts.showAuthorizationRequired(required.providerId, required.displayName)
                     graph.repository.recordEvent(
                         EventType.AUTH_REQUIRED,
                         "${graph.mail.displayName} reply content could not be fetched until the account is reconnected",

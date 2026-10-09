@@ -10,9 +10,10 @@ import com.scifsidekick.cleanroom.messaging.EmailPayload
  * when this provider's own evidence shows the sender is who the `From` header claims (a DMARC pass
  * aligned with the `From` domain). Anything missing, unrecognized or ambiguous is null.
  *
- * Ids are scoped to the provider per [MailIds]: [MailMessage.id], [MailReceipt.messageId],
- * [BounceNotice.messageId], and the ids passed to [markRead] and [fetchContent] are unprefixed for
- * Gmail and `<providerId>:<native id>` for any other provider.
+ * Ids are scoped to the provider per [MailIds]: [MailMessage.id], [MailMessage.threadId],
+ * [MailReceipt.messageId], [MailReceipt.threadId], [BounceNotice.messageId], and the ids passed to
+ * [markRead] and [fetchContent] are unprefixed for Gmail and `<providerId>:<native id>` for any
+ * other provider.
  */
 interface MailTransport {
     /** Stable lowercase id: "gmail" now, "graph" later. Used as the message-id prefix, see [MailIds]. */
@@ -39,6 +40,13 @@ interface MailTransport {
         deliveryKey: String,
         verifyPriorDelivery: Boolean,
     ): MailReceipt
+
+    /**
+     * The already-accepted message for [deliveryKey], as a receipt with [MailReceipt.reconciled]
+     * true, or null when nothing was accepted under that key. Never sends. Null (not an error) when
+     * signed out.
+     */
+    suspend fun findSent(deliveryKey: String): MailReceipt?
 
     /**
      * New candidate replies, skipping [knownMessageIds]. Empty (not an error) when signed out.

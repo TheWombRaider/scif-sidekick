@@ -613,7 +613,7 @@ class QueueProcessor(
     private suspend fun pauseForAuthorization(
         item: SendQueueEntity,
         attemptId: Long,
-        failure: Exception,
+        failure: MailAuthRequiredException,
     ) {
         val detail = (failure.message ?: "${mail.displayName} authorization is required").take(1_000)
         db.withTransaction {
@@ -627,7 +627,7 @@ class QueueProcessor(
                 ),
             )
         }
-        alerts.showAuthorizationRequired()
+        alerts.showAuthorizationRequired(failure.providerId, failure.displayName)
     }
 
     private suspend fun recordPermanentFailure(

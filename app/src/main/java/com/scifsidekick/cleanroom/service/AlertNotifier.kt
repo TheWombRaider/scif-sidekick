@@ -82,26 +82,29 @@ class AlertNotifier(
         context.getSystemService(NotificationManager::class.java).cancel(CIRCUIT_NOTIFICATION_ID)
     }
 
-    fun showAuthorizationRequired() {
+    fun showAuthorizationRequired(
+        providerId: String = "gmail",
+        displayName: String = "Gmail",
+    ) {
         val notification =
             NotificationCompat
                 .Builder(context, ALERT_CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Reconnect Gmail")
-                .setContentText("Email forwarding is queued until Gmail access is restored")
+                .setContentTitle("Reconnect $displayName")
+                .setContentText("Email forwarding is queued until $displayName access is restored")
                 .setStyle(
                     NotificationCompat.BigTextStyle().bigText(
-                        "SCIF Sidekick needs you to reconnect Gmail. Incoming eligible messages remain safely queued; no automatic email attempts will occur until access is restored.",
+                        "SCIF Sidekick needs you to reconnect $displayName. Incoming eligible messages remain safely queued; no automatic email attempts will occur until access is restored.",
                     ),
                 ).setOngoing(true)
                 .setAutoCancel(false)
                 .setContentIntent(contentIntent())
                 .build()
-        context.getSystemService(NotificationManager::class.java).notify(AUTHORIZATION_NOTIFICATION_ID, notification)
+        context.getSystemService(NotificationManager::class.java).notify(authorizationNotificationId(providerId), notification)
     }
 
-    fun clearAuthorizationRequired() {
-        context.getSystemService(NotificationManager::class.java).cancel(AUTHORIZATION_NOTIFICATION_ID)
+    fun clearAuthorizationRequired(providerId: String = "gmail") {
+        context.getSystemService(NotificationManager::class.java).cancel(authorizationNotificationId(providerId))
     }
 
     fun showDeliveryReviewRequired(count: Int) {
@@ -139,5 +142,14 @@ class AlertNotifier(
         const val CIRCUIT_NOTIFICATION_ID = 4102
         const val AUTHORIZATION_NOTIFICATION_ID = 4103
         const val DELIVERY_REVIEW_NOTIFICATION_ID = 4104
+
+        /** Gmail keeps the original id; Graph sits one above it; anything else two above. */
+        internal fun authorizationNotificationId(providerId: String): Int =
+            AUTHORIZATION_NOTIFICATION_ID +
+                when (providerId) {
+                    "gmail" -> 0
+                    "graph" -> 1
+                    else -> 2
+                }
     }
 }

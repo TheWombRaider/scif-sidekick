@@ -4,6 +4,7 @@ import com.scifsidekick.cleanroom.email.BounceNotice
 import com.scifsidekick.cleanroom.email.CommandScan
 import com.scifsidekick.cleanroom.email.CommandSearch
 import com.scifsidekick.cleanroom.email.MailAuthRequiredException
+import com.scifsidekick.cleanroom.email.MailIds
 import com.scifsidekick.cleanroom.email.MailMessage
 import com.scifsidekick.cleanroom.email.MailPollResult
 import com.scifsidekick.cleanroom.email.MailReceipt
@@ -43,7 +44,7 @@ class FakeMailTransport(
         deliveryKey: String,
         verifyPriorDelivery: Boolean,
     ): MailReceipt {
-        if (!signedIn) throw MailAuthRequiredException("Open the app and reconnect $displayName")
+        if (!signedIn) throw MailAuthRequiredException("Open the app and reconnect $displayName", providerId, displayName)
         failNextSendWith?.let {
             failNextSendWith = null
             throw it
@@ -52,9 +53,21 @@ class FakeMailTransport(
         if (verifyPriorDelivery) {
             sent.firstOrNull { it.receipt.rfcMessageId == rfc }?.let { return it.receipt.copy(reconciled = true) }
         }
-        val receipt = MailReceipt(messageId = "fake-${sent.size + 1}", threadId = "thread-${sent.size + 1}", rfcMessageId = rfc, reconciled = false)
+        val receipt =
+            MailReceipt(
+                messageId = MailIds.scoped(providerId, "fake-${sent.size + 1}"),
+                threadId = MailIds.scoped(providerId, "thread-${sent.size + 1}"),
+                rfcMessageId = rfc,
+                reconciled = false,
+            )
         sent += SentRecord(deliveryKey, payload, receipt)
         return receipt
+    }
+
+    override suspend fun findSent(deliveryKey: String): MailReceipt? {
+        if (!signedIn) return null
+        val rfc = MimeMessageBuilder.rfcMessageId(deliveryKey)
+        return sent.firstOrNull { it.receipt.rfcMessageId == rfc }?.receipt?.copy(reconciled = true)
     }
 
     override suspend fun pollReplies(knownMessageIds: Set<String>): MailPollResult {
@@ -76,7 +89,10 @@ class FakeMailTransport(
         return CommandScan(found, emptyList())
     }
 
-    override suspend fun fetchContent(message: MailMessage): MailMessage = message.copy(body = "body of ${message.id}")
+    override suspend fun fetchContent(message: MailMessage): MailMessage {
+        val stored = inbox.firstOrNull { it.message.id == message.id }?.message ?: message
+        return stored.copy(body = "body of ${message.id}")
+    }
 
     override suspend fun markRead(messageId: String) {
         inbox.firstOrNull { it.message.id == messageId }?.unread = false
@@ -86,18 +102,22 @@ class FakeMailTransport(
 
     override fun clearSession() = Unit
 
-    /** Test control: put a message in the inbox. [authenticatedFrom] is what this provider vouches for. */
+    /**
+     * Test control: put a message in the inbox and return its provider-scoped id (see [MailIds]).
+     * [authenticatedFrom] is what this provider vouches for.
+     */
     fun deliver(
         id: String,
         subject: String,
         from: String,
         authenticatedFrom: String? = null,
-    ) {
+    ): String {
+        val scopedId = MailIds.scoped(providerId, id)
         inbox +=
             Stored(
                 MailMessage(
-                    id = id,
-                    threadId = "t-$id",
+                    id = scopedId,
+                    threadId = MailIds.scoped(providerId, "t-$id"),
                     subject = subject,
                     body = "",
                     referencedMessageIds = emptySet(),
@@ -106,5 +126,6 @@ class FakeMailTransport(
                     authenticatedFromAddress = authenticatedFrom,
                 ),
             )
+        return scopedId
     }
 }

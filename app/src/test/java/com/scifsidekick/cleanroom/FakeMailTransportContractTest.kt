@@ -17,6 +17,6 @@ class FakeMailTransportContractTest : MailTransportContract() {
                 subject: String,
                 from: String,
                 authenticatedFrom: String?,
-            ) = fake.deliver(id, subject, from, authenticatedFrom)
+            ): String = fake.deliver(id, subject, from, authenticatedFrom)
         }
 }
