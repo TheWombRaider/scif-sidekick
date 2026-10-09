@@ -44,6 +44,9 @@ Personal phones can't go into a SCIF, which leaves you out of reach for hours at
 | 💓 | **Heartbeat** | Optional "still alive" email on a schedule. If it goes quiet, something broke. Recipients are one tap away: Settings lists every address your filters already forward to. |
 | ⚡ | **Fast** | Forwarded within seconds of arrival. Email replies are picked up in about 30 seconds, or faster with Gmail push. |
 | 🛡️ | **Built-in limits** | Rolling email and text caps, a premium-rate number block and a circuit breaker so a bug can never flood your inbox or run up your carrier bill. |
+| ⏸️ | **Pause without opening the app** | A Quick Settings tile, a home-screen widget and snooze pause or resume forwarding in one tap. |
+| 🩺 | **Self-monitoring** | A watchdog restarts the forwarding service if Android kills it, and bounce detection flags a forward that Gmail accepted but the recipient's mail server rejected. |
+| 📶 | **Dual SIM** | On dual-SIM phones, choose which line your outgoing texts are sent from. |
 | 🔒 | **App lock & backup** | Biometric or screen-lock gate, plus export and restore of all your filters and settings under **Settings → Backup and restore**. |
 
 ---
@@ -193,7 +196,7 @@ Signed release builds are still supported; the steps are in [RELEASING.md](RELEA
 
 ## 🧹 Uninstall and your data
 
-Uninstalling deletes everything the app stored on the phone (queue, history, settings). Exported backups stay where you saved them. To cut Google access, remove the app under *Google Account → Security → Third-party access* and delete the Google Cloud project you created. Forwarded emails stay in the mailboxes they were sent to until you delete them.
+Uninstalling deletes everything the app stored on the phone (queue, activity, settings). Exported backups stay where you saved them, so export one from **Settings → Backup and restore** first if you plan to reinstall. To cut Google access, remove the app under *Google Account → Security → Third-party access* and delete the Google Cloud project you created. Forwarded emails stay in the mailboxes they were sent to until you delete them.
 
 ---
 
