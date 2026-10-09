@@ -2,6 +2,9 @@
 
 The full release notes, with the reasoning behind each change. The short version is [CHANGELOG.md](../CHANGELOG.md).
 
+## 1.28.1
+- **Text caps raised to 100 an hour and 1,000 a day** (were 60 and 200); the per-minute cap stays at 10. `HardRateLimits.SMS` is the only constant that changed, and the tests that pinned the old numbers now pin the new ones. Email caps are unchanged because they sit just under Gmail's own daily sending limit.
+
 ## 1.26.0
 - **Owner address gets all four commands** on first Gmail connect (Compose, Enable, Disable, Status), seeded once per install. Installs that already seeded a Status-only owner are not changed.
 - **Commands screen** in the menu, built from one `CommandHelp` table that unit tests check against the real subject parser.
