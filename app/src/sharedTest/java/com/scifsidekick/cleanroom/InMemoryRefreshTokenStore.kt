@@ -11,9 +11,13 @@ class InMemoryRefreshTokenStore(
     var clears = 0
         private set
 
+    /** When true, [write] throws as a failed commit or Keystore error would, and stores nothing. */
+    @Volatile var failWrites = false
+
     @Synchronized override fun read(): String? = token
 
     @Synchronized override fun write(token: String) {
+        if (failWrites) throw IllegalStateException("write failed")
         writes += token
         this.token = token
     }

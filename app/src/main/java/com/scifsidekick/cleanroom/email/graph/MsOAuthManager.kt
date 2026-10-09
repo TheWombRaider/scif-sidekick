@@ -99,8 +99,8 @@ class MsOAuthManager(
             userCode = userCode,
             verificationUri = uri,
             deviceCode = deviceCode,
-            expiresInSec = json.optInt("expires_in", DEFAULT_EXPIRES_SEC).takeIf { it > 0 } ?: DEFAULT_EXPIRES_SEC,
-            intervalSec = json.optInt("interval", DEFAULT_INTERVAL_SEC).takeIf { it > 0 } ?: DEFAULT_INTERVAL_SEC,
+            expiresInSec = codeLifetimeSec(json.optInt("expires_in", DEFAULT_EXPIRES_SEC)),
+            intervalSec = pollIntervalSec(json.optInt("interval", DEFAULT_INTERVAL_SEC)),
             message = string(json, "message") ?: "Open $uri and enter the code $userCode",
         )
     }
@@ -113,8 +113,8 @@ class MsOAuthManager(
     suspend fun awaitDeviceCode(code: DeviceCode): DeviceCodeResult {
         val id = clientId()?.trim().orEmpty()
         if (id.isEmpty()) return DeviceCodeResult.Failed(NO_CLIENT_ID)
-        val deadline = nowMs() + code.expiresInSec.coerceAtLeast(1) * 1000L
-        var intervalMs = code.intervalSec.coerceAtLeast(1) * 1000L
+        val deadline = nowMs() + codeLifetimeSec(code.expiresInSec) * 1000L
+        var intervalMs = pollIntervalSec(code.intervalSec) * 1000L
         try {
             while (true) {
                 delayMs(intervalMs)
@@ -133,10 +133,12 @@ class MsOAuthManager(
                     } catch (_: IOException) {
                         continue // a dropped connection is not an answer; try again at the next interval
                     }
+                // A server-side outage is not an answer either: keep polling until the code expires.
+                if (reply.status >= 500) continue
                 val json = reply.json ?: return DeviceCodeResult.Failed(UNREADABLE)
                 if (reply.status in 200..299) return finishSignIn(json)
                 when (val error = string(json, "error")) {
-                    "authorization_pending" -> Unit
+                    "authorization_pending", "temporarily_unavailable" -> Unit
                     "slow_down" -> intervalMs += SLOW_DOWN_MS
                     else -> return DeviceCodeResult.Failed(failureMessage(error))
                 }
@@ -165,8 +167,9 @@ class MsOAuthManager(
      * A valid access token: the cached one until a minute before it expires, otherwise a new one from
      * the stored refresh token. One refresh at a time; callers waiting on the lock reuse its result.
      *
-     * @throws MailAuthRequiredException when there is no stored token or Microsoft rejects it
-     *   (`invalid_grant`, which also clears the stored token).
+     * @throws MailAuthRequiredException when there is no stored token or client id, or Microsoft rejects
+     *   the token (`invalid_grant`, which also clears it), unless a sign-in that finished meanwhile
+     *   left a valid access token, which is returned instead.
      * @throws IOException on a network failure (the stored token is kept).
      * @throws MailHttpException on any other token-endpoint failure (the stored token is kept).
      */
@@ -196,11 +199,19 @@ class MsOAuthManager(
         if (reply.status in 200..299) {
             val access = json?.let { string(it, "access_token") } ?: throw MailHttpException(reply.status, "Microsoft sent an unreadable token response")
             synchronized(stateLock) {
-                // Disconnected, or signed in again, while this request was out: its result is stale.
-                if (store.read() != refreshToken) throw authRequired()
+                // Disconnected, or signed in again, while this request was out: this result is stale and
+                // is neither stored nor cached. A newer sign-in's access token is still fine to use.
+                if (store.read() != refreshToken) return valid() ?: throw authRequired()
                 // Rotation: persist the new refresh token before handing out the access token, and
-                // never replace a stored token with a blank one.
-                string(json, "refresh_token")?.let { store.write(it) }
+                // never replace a stored token with a blank one. If it cannot be saved, the old refresh
+                // token stays in the store and the new access token is still good for this hour.
+                string(json, "refresh_token")?.let { rotated ->
+                    try {
+                        store.write(rotated)
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                    }
+                }
                 cache(access, json)
             }
             return access
@@ -208,11 +219,11 @@ class MsOAuthManager(
         val error = json?.let { string(it, "error") }
         if (error == "invalid_grant") {
             synchronized(stateLock) {
-                // Only forget the token Microsoft rejected, not one a sign-in stored meanwhile.
-                if (store.read() == refreshToken) {
-                    store.clear()
-                    cached = null
-                }
+                // Only forget the token Microsoft rejected, not one a sign-in stored meanwhile; that
+                // sign-in's access token is still fine to use.
+                if (store.read() != refreshToken) return valid() ?: throw authRequired()
+                store.clear()
+                cached = null
             }
             throw authRequired()
         }
@@ -234,7 +245,10 @@ class MsOAuthManager(
         access: String,
         json: JSONObject,
     ) {
-        val expiresInSec = json.optLong("expires_in", DEFAULT_TOKEN_LIFETIME_SEC).takeIf { it > 0 } ?: DEFAULT_TOKEN_LIFETIME_SEC
+        val expiresInSec =
+            json
+                .optLong("expires_in", DEFAULT_TOKEN_LIFETIME_SEC)
+                .let { if (it <= 0) DEFAULT_TOKEN_LIFETIME_SEC else it.coerceIn(MIN_TOKEN_LIFETIME_SEC, MAX_TOKEN_LIFETIME_SEC) }
         cached = CachedToken(access, nowMs() + expiresInSec * 1000L)
     }
 
@@ -294,6 +308,15 @@ class MsOAuthManager(
         private const val DEFAULT_INTERVAL_SEC = 5
         private const val DEFAULT_EXPIRES_SEC = 900
         private const val DEFAULT_TOKEN_LIFETIME_SEC = 3600L
+        private const val MAX_INTERVAL_SEC = 60
+        private const val MAX_EXPIRES_SEC = 1800
+        private const val MIN_TOKEN_LIFETIME_SEC = 60L
+        private const val MAX_TOKEN_LIFETIME_SEC = 86_400L
+
+        // Server-supplied timings are bounded so a bad value cannot make polling hot, endless or overflow.
+        private fun pollIntervalSec(value: Int): Int = if (value <= 0) DEFAULT_INTERVAL_SEC else value.coerceAtMost(MAX_INTERVAL_SEC)
+
+        private fun codeLifetimeSec(value: Int): Int = if (value <= 0) DEFAULT_EXPIRES_SEC else value.coerceAtMost(MAX_EXPIRES_SEC)
 
         private const val NO_CLIENT_ID = "Enter your Microsoft app ID first"
         private const val EXPIRED = "The code expired. Start again to get a new code."

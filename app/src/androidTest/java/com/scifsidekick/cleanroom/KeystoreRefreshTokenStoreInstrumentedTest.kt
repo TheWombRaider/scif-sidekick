@@ -85,6 +85,18 @@ class KeystoreRefreshTokenStoreInstrumentedTest {
         assertEquals("second-$TOKEN", store.read())
     }
 
+    @Test fun anExistingUsableKeyIsReusedNotRegenerated() {
+        store.write(TOKEN)
+        val firstCiphertext = stored()
+        val second = KeystoreRefreshTokenStore(context)
+        assertEquals(TOKEN, second.read())
+        second.write("second-$TOKEN")
+        assertEquals("second-$TOKEN", store.read())
+        // The first write's ciphertext still decrypts, so the second store used the same key.
+        assertTrue(prefs.edit().putString(KeystoreRefreshTokenStore.PREF_KEY, firstCiphertext).commit())
+        assertEquals(TOKEN, KeystoreRefreshTokenStore(context).read())
+    }
+
     @Test fun aMissingKeyReadsAsNull() {
         store.write(TOKEN)
         KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(KeystoreRefreshTokenStore.KEY_ALIAS)

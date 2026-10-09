@@ -6,6 +6,9 @@ import com.scifsidekick.cleanroom.email.graph.DeviceCodeResult
 import com.scifsidekick.cleanroom.email.graph.MsOAuthManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -23,6 +26,8 @@ import org.junit.Assert.fail
 import org.junit.Test
 import java.io.IOException
 import java.util.Base64
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class MsOAuthManagerTest {
     /** One request the fake client saw: the URL and the form fields. */
@@ -36,7 +41,7 @@ class MsOAuthManagerTest {
     private var now = 1_000_000L
 
     /** Runs inside the fake network call, to model something happening while a request is in flight. */
-    private var duringRequest: (() -> Unit)? = null
+    @Volatile private var duringRequest: (() -> Unit)? = null
 
     /** An [OkHttpClient] whose interceptor answers each request with the next scripted (status, body). */
     private fun scripted(vararg responses: Pair<Int, String>): OkHttpClient = scriptedSteps(responses.map { Step.Reply(it.first, it.second) })
@@ -60,8 +65,11 @@ class MsOAuthManagerTest {
                     (request.body as? FormBody)?.let { body -> (0 until body.size).associate { body.name(it) to body.value(it) } }
                         ?: emptyMap()
                 synchronized(seen) { seen += Seen(request.url.toString(), form) }
-                duringRequest?.invoke()
                 val step = synchronized(queue) { queue.removeFirstOrNull() } ?: throw AssertionError("unexpected request ${request.url}")
+                duringRequest?.let { hook ->
+                    duringRequest = null // runs once, so a hook may itself make a request
+                    hook()
+                }
                 when (step) {
                     Step.NetworkDown -> throw IOException("network down")
                     is Step.Reply ->
@@ -250,9 +258,9 @@ class MsOAuthManagerTest {
 
     @Test fun `malformed JSON fails`() =
         runBlocking {
-            for (body in listOf("<html>Bad gateway</html>", "", "{\"access_token\":")) {
-                val result = manager(scripted(502 to body)).awaitDeviceCode(code())
-                assertTrue("'$body' -> $result", result is DeviceCodeResult.Failed)
+            for ((status, body) in listOf(200 to "<html>OK</html>", 400 to "", 400 to "{\"access_token\":", 200 to "{\"access_token\":")) {
+                val result = manager(scripted(status to body)).awaitDeviceCode(code())
+                assertTrue("$status '$body' -> $result", result is DeviceCodeResult.Failed)
             }
             // A 200 with no refresh token is not a usable sign-in either.
             val store = InMemoryRefreshTokenStore()
@@ -407,11 +415,207 @@ class MsOAuthManagerTest {
     @Test fun `concurrent callers share one refresh`() =
         runBlocking {
             val mgr = manager(scripted(200 to tokens(access = ACCESS_1)), InMemoryRefreshTokenStore(REFRESH_1))
-            val results = mutableListOf<String>()
-            val jobs = (1..5).map { launch(kotlinx.coroutines.Dispatchers.Default) { mgr.freshAccessToken().also { synchronized(results) { results += it } } } }
-            jobs.forEach { it.join() }
-            assertEquals(List(5) { ACCESS_1 }, results)
+            val ready = CountDownLatch(5)
+            val gate = CompletableDeferred<Unit>()
+            // Hold the one request open long enough that every other caller is queued on the lock.
+            duringRequest = { Thread.sleep(200) }
+            val callers =
+                (1..5).map {
+                    async(Dispatchers.Default) {
+                        ready.countDown()
+                        gate.await()
+                        mgr.freshAccessToken()
+                    }
+                }
+            assertTrue(ready.await(5, TimeUnit.SECONDS))
+            gate.complete(Unit)
+            assertEquals(List(5) { ACCESS_1 }, callers.awaitAll())
             assertEquals(1, seen.size)
+        }
+
+    @Test fun `a blank client id on refresh asks for a reconnect without a request`() =
+        runBlocking {
+            for (id in listOf(null, "", "  ")) {
+                val store = InMemoryRefreshTokenStore(REFRESH_1)
+                try {
+                    manager(scripted(), store, clientId = id).freshAccessToken()
+                    fail("expected MailAuthRequiredException for '$id'")
+                } catch (e: MailAuthRequiredException) {
+                    assertEquals("graph", e.providerId)
+                }
+                assertEquals(REFRESH_1, store.read())
+            }
+            assertTrue(seen.isEmpty())
+        }
+
+    @Test fun `a stale refresh after disconnect caches nothing`() =
+        runBlocking {
+            val store = InMemoryRefreshTokenStore(REFRESH_1)
+            val mgr = manager(scripted(200 to tokens(access = ACCESS_1), 200 to tokens(access = ACCESS_2)), store)
+            duringRequest = { mgr.disconnect() }
+            try {
+                mgr.freshAccessToken()
+                fail("expected MailAuthRequiredException")
+            } catch (_: MailAuthRequiredException) {
+            }
+            store.write(REFRESH_1)
+            // The stale ACCESS_1 was not cached: the next call refreshes.
+            assertEquals(ACCESS_2, mgr.freshAccessToken())
+            assertEquals(2, seen.size)
+        }
+
+    /** A device-code sign-in that runs to completion while the outer request is in flight. */
+    private fun signInDuringRequest(mgr: MsOAuthManager) {
+        duringRequest = { runBlocking { assertTrue(mgr.awaitDeviceCode(code()) is DeviceCodeResult.Connected) } }
+    }
+
+    @Test fun `a sign-in that completes mid-refresh wins and its access token is returned`() =
+        runBlocking {
+            val store = InMemoryRefreshTokenStore(REFRESH_1)
+            val mgr =
+                manager(
+                    scripted(200 to tokens(access = ACCESS_1, refresh = REFRESH_2), 200 to tokens(access = ACCESS_NEW, refresh = REFRESH_NEW)),
+                    store,
+                )
+            signInDuringRequest(mgr)
+            assertEquals(ACCESS_NEW, mgr.freshAccessToken())
+            assertEquals(REFRESH_NEW, store.read())
+            assertEquals(listOf(REFRESH_NEW), store.writes)
+            assertEquals(ACCESS_NEW, mgr.freshAccessToken())
+            assertEquals(2, seen.size)
+        }
+
+    @Test fun `invalid_grant for the old token while a sign-in completes returns the new access token`() =
+        runBlocking {
+            val store = InMemoryRefreshTokenStore(REFRESH_1)
+            val mgr = manager(scripted(400 to error("invalid_grant"), 200 to tokens(access = ACCESS_NEW, refresh = REFRESH_NEW)), store)
+            signInDuringRequest(mgr)
+            assertEquals(ACCESS_NEW, mgr.freshAccessToken())
+            assertEquals(REFRESH_NEW, store.read())
+            assertEquals(0, store.clears)
+        }
+
+    @Test fun `a failed rotation write keeps the old refresh token and still returns the access token`() =
+        runBlocking {
+            val store = InMemoryRefreshTokenStore(REFRESH_1)
+            store.failWrites = true
+            val mgr = manager(scripted(200 to tokens(access = ACCESS_1, refresh = REFRESH_2)), store)
+            assertEquals(ACCESS_1, mgr.freshAccessToken())
+            assertEquals(REFRESH_1, store.read())
+            assertEquals(0, store.clears)
+            assertEquals(ACCESS_1, mgr.freshAccessToken()) // cached
+            assertEquals(1, seen.size)
+        }
+
+    @Test fun `token lifetime is clamped so a huge expires_in cannot disable refresh`() =
+        runBlocking {
+            val mgr =
+                manager(
+                    scripted(200 to tokens(access = ACCESS_1, expiresIn = Int.MAX_VALUE), 200 to tokens(access = ACCESS_2)),
+                    InMemoryRefreshTokenStore(REFRESH_1),
+                )
+            assertEquals(ACCESS_1, mgr.freshAccessToken())
+            now += 86_400_000L - 61_000L
+            assertEquals(ACCESS_1, mgr.freshAccessToken())
+            now += 2_000L
+            assertEquals(ACCESS_2, mgr.freshAccessToken())
+        }
+
+    @Test fun `a non-positive token lifetime means an hour`() =
+        runBlocking {
+            for (expiresIn in listOf(0, -5)) {
+                seen.clear()
+                val start = now
+                val mgr = manager(scripted(200 to tokens(access = ACCESS_1, expiresIn = expiresIn)), InMemoryRefreshTokenStore(REFRESH_1))
+                assertEquals(ACCESS_1, mgr.freshAccessToken())
+                now = start + 3_539_000L
+                assertEquals(ACCESS_1, mgr.freshAccessToken())
+                assertEquals(1, seen.size)
+                now = start
+            }
+        }
+
+    @Test fun `server device-code timings are clamped`() =
+        runBlocking {
+            fun body(
+                interval: Int,
+                expiresIn: Int,
+            ) = """{"user_code":"U","device_code":"$DEVICE_CODE","verification_uri":"https://microsoft.com/devicelogin",""" +
+                """"expires_in":$expiresIn,"interval":$interval,"message":"m"}"""
+            val cases =
+                listOf(
+                    Triple(body(0, 0), 5, 900),
+                    Triple(body(-3, -1), 5, 900),
+                    Triple(body(3600, 99_999), 60, 1800),
+                    Triple(body(7, 600), 7, 600),
+                )
+            for ((json, interval, expires) in cases) {
+                val code = manager(scripted(200 to json)).startDeviceCode()
+                assertEquals(interval, code.intervalSec)
+                assertEquals(expires, code.expiresInSec)
+            }
+        }
+
+    @Test fun `awaitDeviceCode clamps a hand-built code's timings too`() =
+        runBlocking {
+            val mgr = manager(scripted(200 to tokens()))
+            assertTrue(mgr.awaitDeviceCode(code(interval = 3600)) is DeviceCodeResult.Connected)
+            assertEquals(listOf(60_000L), delays)
+
+            delays.clear()
+            val pending = List(29) { Step.Reply(400, error("authorization_pending")) }
+            val lapsing =
+                manager(scriptedSteps(pending), delayMs = {
+                    // Fail fast instead of polling for decades if the cap is missing.
+                    if (delays.size >= 30) throw AssertionError("still polling after 30 minutes")
+                    delays += it
+                    now += it
+                })
+            // expires_in is capped at 30 minutes, so one-minute polls stop after 30 waits.
+            val result = lapsing.awaitDeviceCode(code(interval = 60, expiresIn = Int.MAX_VALUE))
+            assertTrue((result as DeviceCodeResult.Failed).reason.startsWith("The code expired"))
+            assertEquals(30, delays.size)
+        }
+
+    @Test fun `server errors while polling keep polling`() =
+        runBlocking {
+            val store = InMemoryRefreshTokenStore()
+            val mgr =
+                manager(
+                    scripted(
+                        502 to "<html>Bad gateway</html>",
+                        503 to "",
+                        500 to error("server_error", LEAKY),
+                        400 to error("temporarily_unavailable"),
+                        200 to tokens(),
+                    ),
+                    store,
+                )
+            assertTrue(mgr.awaitDeviceCode(code()) is DeviceCodeResult.Connected)
+            assertEquals(REFRESH_2, store.read())
+            assertEquals(5, delays.size)
+        }
+
+    @Test fun `server errors until the code lapses end with the expiry message`() =
+        runBlocking {
+            val mgr =
+                manager(scripted(503 to "", 503 to "", 503 to ""), delayMs = {
+                    delays += it
+                    now += it
+                })
+            val result = mgr.awaitDeviceCode(code(interval = 5, expiresIn = 16))
+            assertTrue((result as DeviceCodeResult.Failed).reason.startsWith("The code expired"))
+            assertEquals(3, seen.size)
+        }
+
+    @Test fun `other 4xx errors still end polling`() =
+        runBlocking {
+            for (reason in listOf("invalid_client", "bad_verification_code", "invalid_grant", "something_new")) {
+                seen.clear()
+                val result = manager(scripted(400 to error(reason))).awaitDeviceCode(code())
+                assertTrue("$reason -> $result", result is DeviceCodeResult.Failed)
+                assertEquals(1, seen.size)
+            }
         }
 
     @Test fun `a disconnect during a refresh is not undone by the rotated token`() =
@@ -463,6 +667,8 @@ class MsOAuthManagerTest {
         const val ACCESS_2 = "EwA-access-two"
         const val REFRESH_1 = "M.C1-refresh-one"
         const val REFRESH_2 = "M.C1-refresh-two"
+        const val ACCESS_NEW = "EwA-access-new-sign-in"
+        const val REFRESH_NEW = "M.C1-refresh-new-sign-in"
         const val LEAKY = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9SECRETSECRETSECRET"
     }
 }

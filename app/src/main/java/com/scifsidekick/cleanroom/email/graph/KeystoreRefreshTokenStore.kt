@@ -6,6 +6,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.core.content.edit
+import java.security.GeneralSecurityException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -50,7 +51,7 @@ class KeystoreRefreshTokenStore(
     override fun write(token: String) {
         require(token.isNotBlank()) { "Refusing to store a blank token" }
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, existingKey() ?: generateKey())
+        cipher.init(Cipher.ENCRYPT_MODE, keyForWrite())
         val iv = cipher.iv
         check(iv != null && iv.size == IV_BYTES) { "Unexpected IV from the Keystore" }
         val ciphertext = cipher.doFinal(token.toByteArray(Charsets.UTF_8))
@@ -67,19 +68,19 @@ class KeystoreRefreshTokenStore(
         }
     }
 
-    private fun existingKey(): SecretKey? =
-        try {
-            keyStore().getKey(KEY_ALIAS, null) as? SecretKey
-        } catch (_: Exception) {
-            null
-        }
+    /**
+     * The existing key, or a new one only when the alias is definitely absent. Any Keystore error
+     * (including a transient one) fails this write and leaves the alias alone: replacing a key that
+     * still exists would make the stored ciphertext unreadable for good.
+     */
+    private fun keyForWrite(): SecretKey {
+        val keyStore = keyStore()
+        if (!keyStore.containsAlias(KEY_ALIAS)) return generateKey()
+        return keyStore.getKey(KEY_ALIAS, null) as? SecretKey
+            ?: throw GeneralSecurityException("Keystore entry is not a secret key")
+    }
 
     private fun generateKey(): SecretKey {
-        // A leftover entry that could not be loaded as a key would block generation under the alias.
-        try {
-            keyStore().deleteEntry(KEY_ALIAS)
-        } catch (_: Exception) {
-        }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
         generator.init(
             KeyGenParameterSpec
