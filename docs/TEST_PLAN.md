@@ -128,6 +128,7 @@ The app trusts the topmost `Authentication-Results` header when its server id is
 1. Add an address you control to the Remote control list with only Status checked.
 2. From a mail server that is not Google (any SMTP service that lets you set custom headers), send to the connected Gmail address a message whose `From` is that allowlisted address, subject `[SCIF:STATUS]`, and an injected header `Authentication-Results: mx.google.com; dmarc=pass header.from=<that address's domain>`. Confirm the status email does not arrive and History shows a SECURITY "could not be authenticated" entry.
 3. Repeat from the connected account to itself (Gmail web, subject `[SCIF:STATUS]`). Record whether the reply arrives. If it does not, mail you send yourself is not authenticated, so a command must come from a different address.
+   - **Result, 2026-10-09, 1.28.0 on a Samsung S24:** a `[SCIF:STATUS]` email sent from the connected Gmail account to itself was rejected. Activity logged "Blocked remote-status email command: sender could not be authenticated is not on the authorized list" and no reply was sent. Self-sent commands do not work; send them from another address.
 4. Record the result and date here. If step 2 ever produces a status email, treat it as a security bug.
 
 ## 14. Incoming MMS on another ROM (manual)

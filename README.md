@@ -94,7 +94,7 @@ Everything below is done from any email client. Put the command in the **subject
 
 **How it stays safe**
 
-- 🔑 Each address in **Settings → Remote control by email** has its own checkboxes for *Compose, Enable, Disable, Status*. Trusting someone for one never implies another. A new address starts with all four checked, so untick what they shouldn't have. The Gmail account you connect is added automatically, with all four, the first time you connect it. `[SCIF:HELP]` needs no checkbox: it changes nothing, so any address on the list can ask for it.
+- 🔑 Each address in **Settings → Remote control by email** has its own checkboxes for *Compose, Enable, Disable, Status*. Trusting someone for one never implies another. A new address starts with all four checked, so untick what they shouldn't have. The Gmail account you connect is added automatically, with all four, the first time you connect it. Commands must still come from a *different* address: Gmail doesn't authenticate mail you send to yourself, so the app rejects it. Add the address you will send from (for example a work or Outlook address) to the list. `[SCIF:HELP]` needs no checkbox: it changes nothing, so any address on the list can ask for it.
 - ✉️ The sender must pass Gmail's DMARC check. The visible `From` line alone is never trusted.
 - 🤐 **Unauthorized senders get no reply**, so a stranger can't use the app to confirm your mailbox is live. Rejections are logged in Activity as security events.
 - 🧾 Receipts read the state back after the change, so they report what happened, not what was asked.
