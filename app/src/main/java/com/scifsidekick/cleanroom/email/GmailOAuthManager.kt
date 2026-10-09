@@ -100,7 +100,7 @@ class GmailOAuthManager(
      * bridge [rememberGrant] relies on can leave null even for a genuinely active grant (see that
      * function's own doc comment). Without any account to name, [RevokeAccessRequest] has nothing
      * to revoke and this silently degrades to "clear the local token only" -- the caller should
-     * pass the account email from [com.scifsidekick.cleanroom.email.GmailGateway.currentAccountEmail]
+     * pass the account email from [com.scifsidekick.cleanroom.email.GmailGateway.accountEmail]
      * (fetched *before* calling this, since the token this needs is about to be cleared) so the
      * common case actually revokes server-side access instead of just hiding the disconnected
      * state locally.

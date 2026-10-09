@@ -63,7 +63,7 @@ class MainViewModel(
     val pubSubGranted get() = graph.oauth.pubSubGranted
     val isDebug get() = BuildConfig.DEBUG
 
-    suspend fun fetchGmailAccountEmail(): String? = graph.gmail.currentAccountEmail()
+    suspend fun fetchGmailAccountEmail(): String? = graph.gmail.accountEmail()
     val fakeTransport get() = graph.debug.fakeEmailTransport
 
     /** Allows the connected Gmail account to ask for status the first time it's known -- see
@@ -272,7 +272,7 @@ class MainViewModel(
             // recover an account to revoke against when the deprecated sign-in bridge disconnect()
             // otherwise falls back to has come back empty. See GmailOAuthManager.disconnect's own
             // doc comment for why this matters.
-            val fallbackEmail = suspendRunCatching { graph.gmail.currentAccountEmail() }.getOrNull()
+            val fallbackEmail = suspendRunCatching { graph.gmail.accountEmail() }.getOrNull()
             val revoked = graph.oauth.disconnect(fallbackEmail)
             graph.gmail.clearSession()
             graph.alerts.clearAuthorizationRequired()
@@ -349,7 +349,7 @@ class MainViewModel(
             val now = System.currentTimeMillis()
             val result =
                 suspendRunCatching {
-                    val toAddress = graph.gmail.currentAccountEmail() ?: error("Could not read the connected Gmail account's address")
+                    val toAddress = graph.gmail.accountEmail() ?: error("Could not read the connected Gmail account's address")
                     val sentAt = DateFormat.getDateTimeInstance().format(Date(now))
                     graph.gmail.send(
                         payload =

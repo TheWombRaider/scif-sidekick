@@ -13,7 +13,7 @@ import com.scifsidekick.cleanroom.data.EventType
 import com.scifsidekick.cleanroom.email.MailMessage
 import com.scifsidekick.cleanroom.util.RemoteCommand
 import com.scifsidekick.cleanroom.util.RemoteCommandPlanner
-import com.scifsidekick.cleanroom.util.RemoteCommandQuery
+import com.scifsidekick.cleanroom.util.RemoteCommandSearch
 import com.scifsidekick.cleanroom.util.RemoteCommands
 import com.scifsidekick.cleanroom.util.suspendRunCatching
 import java.util.concurrent.TimeUnit
@@ -62,13 +62,13 @@ class RemoteEnableWorker(
         // on either one is checked per-command below, once the candidate's subject is parsed.
         if (!settings.remoteControlEnabled) return Result.success()
         val wantedTags = listOf(RemoteCommands.ENABLE_TAG, RemoteCommands.STATUS_TAG, RemoteCommands.HELP_TAG)
-        if (!graph.gmail.isAvailable) return Result.success()
+        if (!graph.mail.isAvailable) return Result.success()
         // Searches only the allowlisted senders, so mail from anyone else never competes for a
         // slot; with nobody allowlisted there is nothing to act on.
-        val query = RemoteCommandQuery.build(wantedTags, settings.remoteControlSendersJson) ?: return Result.success()
+        val search = RemoteCommandSearch.plan(wantedTags, settings.remoteControlSendersJson) ?: return Result.success()
 
         val scan =
-            suspendRunCatching { graph.gmail.findRemoteCommands(query) }
+            suspendRunCatching { graph.mail.findCommands(search) }
                 .getOrElse { failure ->
                     graph.repository.recordServiceEvent(
                         "Remote command email check failed: ${(failure.message ?: failure.javaClass.simpleName).take(300)}",
@@ -76,7 +76,7 @@ class RemoteEnableWorker(
                     return Result.success()
                 }
         // A message whose headers couldn't be read must not be re-fetched every run.
-        scan.unreadable.forEach { id -> suspendRunCatching { graph.gmail.markRead(id) } }
+        scan.unreadable.forEach { id -> suspendRunCatching { graph.mail.markRead(id) } }
 
         // Gmail's own subject: search is a loose substring/word match, not an exact tag check --
         // the planner's parse is the real one. Anything that isn't a usable command (a near-miss,
@@ -91,7 +91,7 @@ class RemoteEnableWorker(
         for (step in steps) {
             val candidate = byId.getValue(step.candidate.id)
             when (step.action) {
-                RemoteCommandPlanner.Action.CONSUME -> suspendRunCatching { graph.gmail.markRead(candidate.id) }
+                RemoteCommandPlanner.Action.CONSUME -> suspendRunCatching { graph.mail.markRead(candidate.id) }
                 RemoteCommandPlanner.Action.ANSWER_STATUS ->
                     RemoteStatusResponder.answer(graph, candidate, settings, drainAfterQueueing = true)
                 RemoteCommandPlanner.Action.ANSWER_HELP ->
@@ -102,7 +102,7 @@ class RemoteEnableWorker(
                             (candidate.authenticatedFromAddress ?: "could not be authenticated") +
                             " is not on the authorized list",
                     )
-                    suspendRunCatching { graph.gmail.markRead(candidate.id) }
+                    suspendRunCatching { graph.mail.markRead(candidate.id) }
                 }
                 RemoteCommandPlanner.Action.APPLY_ENABLE -> applyEnable(graph, candidate)
             }
@@ -130,7 +130,7 @@ class RemoteEnableWorker(
                     (startFailure.message ?: startFailure.javaClass.simpleName).take(300),
             )
         }
-        suspendRunCatching { graph.gmail.markRead(candidate.id) }
+        suspendRunCatching { graph.mail.markRead(candidate.id) }
         StatusWidgetProvider.requestUpdate(applicationContext)
         RemoteCommandReceipt.send(
             applicationContext,

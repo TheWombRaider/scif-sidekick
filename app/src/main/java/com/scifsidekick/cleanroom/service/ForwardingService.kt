@@ -231,7 +231,7 @@ class ForwardingService : Service() {
     private suspend fun pollReplies() {
         val result =
             try {
-                graph.gmail.unreadReplies(graph.repository.recentProcessedGmailIds())
+                graph.gmail.pollReplies(graph.repository.recentProcessedGmailIds())
             } catch (required: com.scifsidekick.cleanroom.email.ReauthorizationRequiredException) {
                 graph.alerts.showAuthorizationRequired()
                 graph.repository.recordEvent(

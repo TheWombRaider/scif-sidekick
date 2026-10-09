@@ -29,16 +29,18 @@ class GmailGateway(
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(45, TimeUnit.SECONDS)
             .build(),
-) {
+) : MailTransport {
     @Volatile private var profileEmailAddress: String? = null
 
     // In memory only: losing it to process death just costs one full sweep on the next poll.
     @Volatile private var historyCursor: String? = null
 
     @Volatile private var lastFullSweepMs = 0L
-    val isAvailable: Boolean get() = oauth.isAuthorized || debug.fakeEmailTransport
+    override val providerId: String = MailIds.GMAIL
+    override val displayName: String = "Gmail"
+    override val isAvailable: Boolean get() = oauth.isAuthorized || debug.fakeEmailTransport
 
-    fun clearSession() {
+    override fun clearSession() {
         profileEmailAddress = null
         historyCursor = null
         lastFullSweepMs = 0L
@@ -50,12 +52,12 @@ class GmailGateway(
      * conversion is unreliable for a pure-scope Authorization API grant (no identity/sign-in
      * scope was requested) and can silently come back null even when a grant is active.
      */
-    suspend fun currentAccountEmail(): String? {
+    override suspend fun accountEmail(): String? {
         if (!oauth.isAuthorized) return null
         return suspendRunCatching { accountEmail(oauth.freshAccessToken()) }.getOrNull()
     }
 
-    suspend fun send(
+    override suspend fun send(
         payload: EmailPayload,
         attachmentPaths: List<String>,
         deliveryKey: String,
@@ -117,7 +119,7 @@ class GmailGateway(
      * repeats before they're ever fetched, and Gmail's own list ordering surfaces genuinely new
      * matches on the first page regardless of how much older history also matches.
      */
-    suspend fun unreadReplies(knownMessageIds: Set<String> = emptySet()): MailPollResult {
+    override suspend fun pollReplies(knownMessageIds: Set<String>): MailPollResult {
         if (!oauth.isAuthorized || debug.fakeEmailTransport) return MailPollResult(emptyList(), emptyList())
         val token = oauth.freshAccessToken()
         val now = System.currentTimeMillis()
@@ -239,21 +241,22 @@ class GmailGateway(
     }
 
     /**
-     * Looks for unread command emails matching [query] (see [com.scifsidekick.cleanroom.util.RemoteCommandQuery]) -- see
+     * Looks for unread command emails matching [search] (see [com.scifsidekick.cleanroom.util.RemoteCommandSearch]) -- see
      * [com.scifsidekick.cleanroom.service.RemoteEnableWorker]'s
-     * own doc comment for why this needs a query entirely separate from [unreadReplies] (that one
+     * own doc comment for why this needs a query entirely separate from [pollReplies] (that one
      * only ever runs while [com.scifsidekick.cleanroom.service.ForwardingService] itself is
      * alive, which is never true at the one moment this command matters).
      *
-     * Unlike [unreadReplies], this deliberately keeps `is:unread` in the query: the self-forwarded
+     * Unlike [pollReplies], this deliberately keeps `is:unread` in the query: the self-forwarded
      * -into-an-open-thread problem that method's own doc comment describes cannot happen here --
      * a command email is always a fresh, top-level message with no prior thread of this app's own
      * to land back inside of. Up to [RemoteCommandPlanner.MAX_CANDIDATES] matches are fetched, newest first, so
      * a pile of unauthorized or malformed mail can't hide a real command; one message that can't
      * be parsed is reported in [CommandScan.unreadable] instead of failing the rest.
      */
-    suspend fun findRemoteCommands(query: String): CommandScan {
+    override suspend fun findCommands(search: CommandSearch): CommandScan {
         if (!oauth.isAuthorized || debug.fakeEmailTransport) return CommandScan(emptyList(), emptyList())
+        val query = GmailCommandQuery.build(search)
         val token = oauth.freshAccessToken()
         val encoded = URLEncoder.encode(query, Charsets.UTF_8.name())
         val listJson =
@@ -301,7 +304,7 @@ class GmailGateway(
      * exercised against a live bounce from a real mail server -- disclosed as unverified, the same
      * as this app's other best-effort integrations (RCS notification parsing, MMS-out).
      */
-    suspend fun checkForBounces(): List<BounceNotice> {
+    override suspend fun checkForBounces(): List<BounceNotice> {
         if (!oauth.isAuthorized || debug.fakeEmailTransport) return emptyList()
         val token = oauth.freshAccessToken()
         val query =
@@ -384,7 +387,7 @@ class GmailGateway(
         return collected.toString()
     }
 
-    suspend fun markRead(messageId: String) {
+    override suspend fun markRead(messageId: String) {
         val token = oauth.freshAccessToken()
         val json = JSONObject().put("removeLabelIds", JSONArray().put("UNREAD")).toString()
         executeAuthorized(
@@ -485,7 +488,7 @@ class GmailGateway(
 
     /** Called only for an already-authorized command. Full MIME content and attachment bytes are
      *  intentionally outside the broad inbox poll's attack surface. */
-    suspend fun fetchContent(reply: MailMessage): MailMessage {
+    override suspend fun fetchContent(reply: MailMessage): MailMessage {
         val token = oauth.freshAccessToken()
         val json =
             executeAuthorized(

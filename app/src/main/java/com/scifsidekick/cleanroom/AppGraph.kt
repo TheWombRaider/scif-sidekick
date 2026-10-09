@@ -7,6 +7,7 @@ import com.scifsidekick.cleanroom.email.DebugControls
 import com.scifsidekick.cleanroom.email.GmailGateway
 import com.scifsidekick.cleanroom.email.GmailOAuthManager
 import com.scifsidekick.cleanroom.email.GmailPushGateway
+import com.scifsidekick.cleanroom.email.MailTransport
 import com.scifsidekick.cleanroom.messaging.MmsGateway
 import com.scifsidekick.cleanroom.messaging.SmsGateway
 import com.scifsidekick.cleanroom.service.AlertNotifier
@@ -23,6 +24,9 @@ class AppGraph private constructor(
     val oauth = GmailOAuthManager(app)
     val debug = DebugControls(app)
     val gmail = GmailGateway(oauth, debug)
+
+    /** What the rest of the app talks to. Today that is Gmail; a router replaces it in a later step. */
+    val mail: MailTransport = gmail
     val gmailPush = GmailPushGateway(oauth, debug)
     val attachments = AttachmentStore(app)
     val alerts = AlertNotifier(app)

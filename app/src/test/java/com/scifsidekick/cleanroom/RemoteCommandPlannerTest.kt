@@ -6,7 +6,6 @@ import com.scifsidekick.cleanroom.util.RemoteCommand
 import com.scifsidekick.cleanroom.util.RemoteCommandPlanner
 import com.scifsidekick.cleanroom.util.RemoteCommandPlanner.Action
 import com.scifsidekick.cleanroom.util.RemoteCommandPlanner.Candidate
-import com.scifsidekick.cleanroom.util.RemoteCommandQuery
 import com.scifsidekick.cleanroom.util.RemoteControlCodec
 import com.scifsidekick.cleanroom.util.RemoteCommandSearch
 import com.scifsidekick.cleanroom.util.RemoteControlCodec.Sender
@@ -88,29 +87,6 @@ class RemoteCommandPlannerTest {
     fun onlyTheFirstTwentyCandidatesAreExamined() {
         val many = (1..30).map { candidate("m$it", "[SCIF:ON]", "x$it@example.org") }
         assertEquals(RemoteCommandPlanner.MAX_CANDIDATES, RemoteCommandPlanner.plan(many, senders).size)
-    }
-
-    @Test
-    fun queryRestrictsToAllowlistedSenders() {
-        val query = RemoteCommandQuery.build(tags, RemoteControlCodec.toJson(listOf(Sender(owner), Sender("Boss@Agency.gov"))))!!
-        assertEquals(
-            "in:inbox is:unread newer_than:2d {subject:\"[SCIF:ON]\" subject:\"[SCIF:STATUS]\"} {from:owner@example.com from:boss@agency.gov}",
-            query,
-        )
-    }
-
-    @Test
-    fun queryHasNoSenderFilterIfAnAddressIsNotSafelyExpressible() {
-        val query = RemoteCommandQuery.build(tags, RemoteControlCodec.toJson(listOf(Sender(owner), Sender("o'neil@example.com"))))!!
-        assertFalse(query.contains("from:"))
-        assertTrue(query.startsWith("in:inbox is:unread newer_than:2d "))
-    }
-
-    @Test
-    fun noAllowlistMeansNoQuery() {
-        assertNull(RemoteCommandQuery.build(tags, "[]"))
-        assertNull(RemoteCommandQuery.build(emptyList(), senders))
-        assertNull(RemoteCommandQuery.build(tags, "not json"))
     }
 
     @Test

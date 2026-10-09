@@ -62,6 +62,7 @@ All in `com.scifsidekick.cleanroom.email`:
 interface MailTransport {
     /** Stable lowercase id, "gmail" now, "graph" in step 2. Used as the message-id prefix. */
     val providerId: String
+    val displayName: String
 
     /** Whether this transport can currently be used (authorized, or the debug fake is on). */
     val isAvailable: Boolean
@@ -136,7 +137,7 @@ This is the safety-critical contract, and the interface fixes its shape without 
 
 - `ReauthorizationRequiredException` becomes a subclass of a new `MailAuthRequiredException(message)`. All five catch sites that name the Gmail class (`ForwardingService` x4, `QueueProcessor`) catch the base class. Behavior is identical for Gmail.
 - `GmailApiException` stays internal to the Gmail adapter and `GmailPushGateway`.
-- Log text that says "Gmail" in generic code paths (for example "Gmail reply poll failed", "Gmail message X accepted") takes the provider id instead, so a second provider produces correct log lines. Gmail's lines stay word-for-word the same when `providerId == "gmail"`.
+- Log text that says "Gmail" in generic code paths (for example "Gmail reply poll failed", "Gmail message X accepted") takes `displayName` instead, so a second provider produces correct log lines. Gmail's lines stay word-for-word the same when `providerId == "gmail"`.
 
 ### Wiring
 

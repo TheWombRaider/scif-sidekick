@@ -65,40 +65,6 @@ object RemoteCommandPlanner {
     }
 }
 
-/** Builds the Gmail search for [RemoteCommandPlanner]'s candidates. */
-object RemoteCommandQuery {
-    // Deliberately conservative: an address with any other character is left out of the sender
-    // filter rather than risk it changing the search's meaning.
-    private val safeAddress = Regex("[a-z0-9._%+-]+@[a-z0-9.-]+")
-
-    /**
-     * Narrows the search to the allowlisted senders so mail from anyone else never competes for
-     * a slot. If any allowlisted address can't be expressed safely the filter is dropped entirely
-     * (every tagged message is then examined, still capped and still authorization-checked).
-     * Null means nobody is allowlisted, so there is nothing to look for.
-     */
-    fun build(
-        commandTags: List<String>,
-        sendersJson: String,
-    ): String? {
-        if (commandTags.isEmpty()) return null
-        val addresses =
-            RemoteControlCodec
-                .fromJson(sendersJson)
-                .mapNotNull { ComposeAuthorization.canonicalAddress(it.address) }
-                .distinct()
-        if (addresses.isEmpty()) return null
-        val subjectClause = commandTags.joinToString(" ", prefix = "{", postfix = "}") { "subject:\"$it\"" }
-        val fromClause =
-            if (addresses.all(safeAddress::matches)) {
-                addresses.joinToString(" ", prefix = " {", postfix = "}") { "from:$it" }
-            } else {
-                ""
-            }
-        return "in:inbox is:unread newer_than:2d $subjectClause$fromClause"
-    }
-}
-
 /** Describes, without any provider's syntax, which command mail [RemoteCommandPlanner] should see. */
 object RemoteCommandSearch {
     /**

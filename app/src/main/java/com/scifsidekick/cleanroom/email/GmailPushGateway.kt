@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
  * existing 30s reply-poll timer. Deliberately narrow in scope -- it never parses a Pub/Sub
  * message payload or Gmail's historyId, it only ever answers "did anything arrive, yes or no."
  * A `true` from [pollPush] is used purely to trigger an immediate, completely unmodified
- * [GmailGateway.unreadReplies]/reply-processing pass; the actual dedupe/authorization/routing
+ * [GmailGateway.pollReplies]/reply-processing pass; the actual dedupe/authorization/routing
  * logic in that path is untouched by this class. If push is never configured, or the calls here
  * fail for any reason, callers must keep relying on the existing 30s poll -- this class has no
  * side effect on that path either way.
