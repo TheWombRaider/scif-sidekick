@@ -38,6 +38,18 @@ The subject tag alone is not authority to send. `sent_email_routes` records the 
 
 `processed_replies` and the SMS or MMS `send_queue` insert occur in the same transaction, preventing a Gmail polling duplicate (the same Gmail message id seen again) from generating two sends. That alone does not catch two genuinely distinct Gmail messages that carry the same target number and body -- observed in practice from what looked like a mail client silently resubmitting one reply. `send_queue.replyDedupeKey` (release 1.9.1, `SidekickRepository.enqueueReplyIfNew`/`enqueueMmsReplyIfNew`) closes that gap: a SHA-256 of `targetNumber|normalizedBody`, checked against every SMS/MMS row queued within the same `duplicateSuppressionEnabled`/`duplicateWindowMinutes` window that already governs incoming-message dedup. The Gmail message is marked read only after the queue insert (or dedupe skip) succeeds. Individual malformed/failing message fetches are isolated so one bad message cannot prevent other replies from being processed.
 
+## Mail transports
+
+All mail goes through the `MailTransport` interface (`graph.mail`); the forwarding, reply and send-queue code never touches a provider API. `GmailGateway` is the only implementation, and no other provider is supported.
+
+Everything provider-specific lives in the Gmail adapter (`email/`): the search syntax for remote commands (`GmailCommandQuery`, built from a neutral `CommandSearch`), sender authentication (`GmailAuthentication`, which turns Gmail's `Authentication-Results` headers into the neutral `authenticatedFromAddress`), OAuth and the account session (`GmailOAuthManager`), and Pub/Sub push (`GmailPushGateway`, reached through `graph.gmailPush`). The connect, disconnect and push settings in `MainViewModel` still use `graph.gmail` and `graph.oauth` directly by design.
+
+Message ids are scoped by provider with `MailIds`. Gmail ids stay unprefixed exactly as already stored, so no migration was needed. Any other provider's ids are `<providerId>:<id>`, split on the first colon only, so ids from two providers can never collide in `processed_replies` or in routing.
+
+`MailAuthRequiredException` is the one shared "reconnect needed" error. Callers pause work and alert on it without knowing which provider raised it.
+
+A new transport must pass `MailTransportContract` (in `src/test`), using the shared `FakeMailTransport` pattern (`src/sharedTest`, used by both unit and instrumented tests): subclass the contract and supply a harness that can sign out and deliver a message.
+
 ## Tables
 
 - `forwarding_state`: enabled, watermark, destination, breaker state, consecutive failures, MMS-forwarding toggle, call-notification toggle, contact filter mode and number list.
