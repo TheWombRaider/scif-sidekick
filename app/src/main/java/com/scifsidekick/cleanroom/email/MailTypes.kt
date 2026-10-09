@@ -46,3 +46,13 @@ data class BounceNotice(
     val referencedRfcMessageIds: Set<String>,
     val summary: String,
 )
+
+/**
+ * Which command mail to look for, independent of any provider's search syntax. [senders] are
+ * canonical lowercase addresses and never empty (see RemoteCommandSearch.plan). Each transport
+ * turns this into its own query.
+ */
+data class CommandSearch(
+    val tags: List<String>,
+    val senders: List<String>,
+)

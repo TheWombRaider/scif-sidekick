@@ -1,5 +1,7 @@
 package com.scifsidekick.cleanroom.util
 
+import com.scifsidekick.cleanroom.email.CommandSearch
+
 /**
  * Decides what [com.scifsidekick.cleanroom.service.RemoteEnableWorker] does with each tagged
  * message it finds, so the order and the "junk can't hide a real command" rule are testable
@@ -94,5 +96,26 @@ object RemoteCommandQuery {
                 ""
             }
         return "in:inbox is:unread newer_than:2d $subjectClause$fromClause"
+    }
+}
+
+/** Describes, without any provider's syntax, which command mail [RemoteCommandPlanner] should see. */
+object RemoteCommandSearch {
+    /**
+     * Narrows the search to the allowlisted senders so mail from anyone else never competes for
+     * a slot. Null means there is nothing to look for: no tags, or nobody allowlisted.
+     */
+    fun plan(
+        commandTags: List<String>,
+        sendersJson: String,
+    ): CommandSearch? {
+        if (commandTags.isEmpty()) return null
+        val addresses =
+            RemoteControlCodec
+                .fromJson(sendersJson)
+                .mapNotNull { ComposeAuthorization.canonicalAddress(it.address) }
+                .distinct()
+        if (addresses.isEmpty()) return null
+        return CommandSearch(commandTags, addresses)
     }
 }

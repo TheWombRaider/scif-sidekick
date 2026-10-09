@@ -1,5 +1,6 @@
 package com.scifsidekick.cleanroom
 
+import com.scifsidekick.cleanroom.email.GmailCommandQuery
 import com.scifsidekick.cleanroom.service.RemoteCommandReceipt
 import com.scifsidekick.cleanroom.util.RemoteCommand
 import com.scifsidekick.cleanroom.util.RemoteCommandPlanner
@@ -7,6 +8,7 @@ import com.scifsidekick.cleanroom.util.RemoteCommandPlanner.Action
 import com.scifsidekick.cleanroom.util.RemoteCommandPlanner.Candidate
 import com.scifsidekick.cleanroom.util.RemoteCommandQuery
 import com.scifsidekick.cleanroom.util.RemoteControlCodec
+import com.scifsidekick.cleanroom.util.RemoteCommandSearch
 import com.scifsidekick.cleanroom.util.RemoteControlCodec.Sender
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -133,5 +135,36 @@ class RemoteCommandPlannerTest {
         val body = RemoteCommandReceipt.body(RemoteCommand.DISABLE, "1.2.3", "Forwarding: OFF")
         assertTrue(body.startsWith("Your [SCIF:OFF] command"))
         assertTrue(body.contains("Forwarding is now DISABLED."))
+    }
+
+    @Test
+    fun searchPlanListsCanonicalAllowlistedSenders() {
+        val search = RemoteCommandSearch.plan(tags, RemoteControlCodec.toJson(listOf(Sender(owner), Sender("Boss@Agency.gov"))))!!
+        assertEquals(tags, search.tags)
+        assertEquals(listOf(owner, "boss@agency.gov"), search.senders)
+    }
+
+    @Test
+    fun searchPlanIsNullWithNoAllowlistOrNoTags() {
+        assertNull(RemoteCommandSearch.plan(tags, "[]"))
+        assertNull(RemoteCommandSearch.plan(emptyList(), senders))
+        assertNull(RemoteCommandSearch.plan(tags, "not json"))
+    }
+
+    @Test
+    fun gmailQueryMatchesTheOldStringExactly() {
+        val search = RemoteCommandSearch.plan(tags, RemoteControlCodec.toJson(listOf(Sender(owner), Sender("Boss@Agency.gov"))))!!
+        assertEquals(
+            "in:inbox is:unread newer_than:2d {subject:\"[SCIF:ON]\" subject:\"[SCIF:STATUS]\"} {from:owner@example.com from:boss@agency.gov}",
+            GmailCommandQuery.build(search),
+        )
+    }
+
+    @Test
+    fun gmailQueryDropsTheSenderFilterIfAnAddressIsNotSafelyExpressible() {
+        val search = RemoteCommandSearch.plan(tags, RemoteControlCodec.toJson(listOf(Sender(owner), Sender("o'neil@example.com"))))!!
+        val query = GmailCommandQuery.build(search)
+        assertFalse(query.contains("from:"))
+        assertTrue(query.startsWith("in:inbox is:unread newer_than:2d "))
     }
 }
