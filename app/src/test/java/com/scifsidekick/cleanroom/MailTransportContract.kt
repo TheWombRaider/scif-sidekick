@@ -67,7 +67,10 @@ abstract class MailTransportContract {
             assertTrue(h.transport.findCommands(search).candidates.isEmpty())
         }
 
-    @Test fun `findCommands ignores mail from addresses outside the search`() =
+    // Sender narrowing is best-effort: a provider may drop or loosen it (Gmail drops the from: filter
+    // when any allowlisted address is not "safe", and its from: match is fuzzy). What keeps strangers
+    // out is authenticatedFromAddress plus the allowlist downstream. This only pins the plain case.
+    @Test fun `findCommands narrows by sender for a plain safe address`() =
         runBlocking {
             val h = newHarness()
             h.deliver("m1", "[SCIF:ON]", "stranger@example.com", null)
@@ -81,6 +84,16 @@ abstract class MailTransportContract {
             h.deliver("m2", "Re: [SCIF:+15551234567]", "owner@example.com", "owner@example.com")
             val result = h.transport.pollReplies(setOf("m1"))
             assertEquals(listOf("m2"), result.replies.map { it.id })
+        }
+
+    // Replying inside an open thread can deliver an already-read self-addressed reply, so a poll
+    // that filters on unread silently never finds it.
+    @Test fun `pollReplies returns messages that are already read`() =
+        runBlocking {
+            val h = newHarness()
+            h.deliver("m1", "Re: [SCIF:+15551234567]", "owner@example.com", "owner@example.com")
+            h.transport.markRead("m1")
+            assertTrue("m1" in h.transport.pollReplies(emptySet()).replies.map { it.id })
         }
 
     @Test fun `send with verifyPriorDelivery does not duplicate`() =

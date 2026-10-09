@@ -40,15 +40,15 @@ The subject tag alone is not authority to send. `sent_email_routes` records the 
 
 ## Mail transports
 
-All mail goes through the `MailTransport` interface (`graph.mail`); the forwarding, reply and send-queue code never touches a provider API. `GmailGateway` is the only implementation, and no other provider is supported.
+All mail goes through the `MailTransport` interface (`graph.mail`); the forwarding, reply and send-queue code never touches a provider API, except Gmail push, which `ForwardingService` and `GmailWatchRenewalWorker` call through `graph.gmailPush`. `GmailGateway` is the only implementation, and no other provider is supported.
 
-Everything provider-specific lives in the Gmail adapter (`email/`): the search syntax for remote commands (`GmailCommandQuery`, built from a neutral `CommandSearch`), sender authentication (`GmailAuthentication`, which turns Gmail's `Authentication-Results` headers into the neutral `authenticatedFromAddress`), OAuth and the account session (`GmailOAuthManager`), and Pub/Sub push (`GmailPushGateway`, reached through `graph.gmailPush`). The connect, disconnect and push settings in `MainViewModel` still use `graph.gmail` and `graph.oauth` directly by design.
+Everything provider-specific lives in the Gmail adapter (`email/`): the search syntax for remote commands (`GmailCommandQuery`, built from a neutral `CommandSearch`), sender authentication (`GmailAuthentication`, which turns Gmail's `Authentication-Results` headers into the neutral `authenticatedFromAddress`), OAuth and token storage (`GmailOAuthManager`), and Pub/Sub push (`GmailPushGateway`, reached through `graph.gmailPush`). The connect, disconnect and push settings in `MainViewModel` still use `graph.gmail` and `graph.oauth` directly by design.
 
 Message ids are scoped by provider with `MailIds`. Gmail ids stay unprefixed exactly as already stored, so no migration was needed. Any other provider's ids are `<providerId>:<id>`, split on the first colon only, so ids from two providers can never collide in `processed_replies` or in routing.
 
 `MailAuthRequiredException` is the one shared "reconnect needed" error. Callers pause work and alert on it without knowing which provider raised it.
 
-A new transport must pass `MailTransportContract` (in `src/test`), using the shared `FakeMailTransport` pattern (`src/sharedTest`, used by both unit and instrumented tests): subclass the contract and supply a harness that can sign out and deliver a message.
+A new transport must pass `MailTransportContract` (in `src/test`), by subclassing the contract and supplying its own harness implementing `MailTransportContract.Harness` (it can sign out and deliver a message). `FakeMailTransport` (`src/sharedTest`, used by both unit and instrumented tests) is the reference implementation.
 
 ## Tables
 

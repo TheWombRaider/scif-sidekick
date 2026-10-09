@@ -78,7 +78,7 @@ class RemoteEnableWorker(
         // A message whose headers couldn't be read must not be re-fetched every run.
         scan.unreadable.forEach { id -> suspendRunCatching { graph.mail.markRead(id) } }
 
-        // Gmail's own subject: search is a loose substring/word match, not an exact tag check --
+        // The provider's own subject search is a loose substring/word match, not an exact tag check --
         // the planner's parse is the real one. Anything that isn't a usable command (a near-miss,
         // or a subject carrying two different tags) is consumed rather than left to clog later
         // runs, and the first authorized enable command wins however much other mail is ahead of it.

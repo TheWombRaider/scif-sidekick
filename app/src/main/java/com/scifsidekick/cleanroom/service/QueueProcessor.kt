@@ -90,7 +90,7 @@ class QueueProcessor(
 
         val reason =
             if (releasedEmails > 0) {
-                "Service restarted; released $releasedEmails interrupted email claim(s) for delayed Gmail reconciliation. " +
+                "Service restarted; released $releasedEmails interrupted email claim(s) for delayed ${mail.displayName} reconciliation. " +
                     "No message history was queried or backfilled."
             } else {
                 "Service started. No message-history reconciliation was performed."
@@ -248,7 +248,7 @@ class QueueProcessor(
     private fun isSystemEmail(item: SendQueueEntity): Boolean =
         runCatching { PayloadCodec.emailFromJson(item.payloadJson).source == "system" }.getOrDefault(false)
 
-    /** Puts email rows stuck in SENDING back in the queue for delayed Gmail reconciliation. A row
+    /** Puts email rows stuck in SENDING back in the queue for delayed provider reconciliation. A row
      *  with a delivery attempt in the last [ACTIVE_CLAIM_GRACE_MS] is left alone: it is being sent
      *  right now by another component (a worker, say) and is not interrupted. */
     suspend fun releaseStaleEmailClaims(now: Long = System.currentTimeMillis()): Int =

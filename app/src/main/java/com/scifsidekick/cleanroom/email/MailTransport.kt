@@ -9,6 +9,10 @@ import com.scifsidekick.cleanroom.messaging.EmailPayload
  * The one rule every implementation must keep: [MailMessage.authenticatedFromAddress] is set only
  * when this provider's own evidence shows the sender is who the `From` header claims (a DMARC pass
  * aligned with the `From` domain). Anything missing, unrecognized or ambiguous is null.
+ *
+ * Ids are scoped to the provider per [MailIds]: [MailMessage.id], [MailReceipt.messageId],
+ * [BounceNotice.messageId], and the ids passed to [markRead] and [fetchContent] are unprefixed for
+ * Gmail and `<providerId>:<native id>` for any other provider.
  */
 interface MailTransport {
     /** Stable lowercase id: "gmail" now, "graph" later. Used as the message-id prefix, see [MailIds]. */
@@ -36,7 +40,14 @@ interface MailTransport {
         verifyPriorDelivery: Boolean,
     ): MailReceipt
 
-    /** New candidate replies, skipping [knownMessageIds]. Empty (not an error) when signed out. */
+    /**
+     * New candidate replies, skipping [knownMessageIds]. Empty (not an error) when signed out.
+     *
+     * Must return messages whether or not they are read. Replying inside an already-open thread can
+     * deliver a self-addressed reply that is already marked read, so an unread filter silently
+     * misses it (no event, nothing queued, no error); that was a real bug. Volume is bounded by a
+     * recency window plus [knownMessageIds], never by read state.
+     */
     suspend fun pollReplies(knownMessageIds: Set<String>): MailPollResult
 
     /** Unread command mail matching [search], newest first. Empty (not an error) when signed out. */

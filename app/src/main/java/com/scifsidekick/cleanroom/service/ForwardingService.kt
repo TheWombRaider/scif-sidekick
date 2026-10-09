@@ -327,7 +327,7 @@ class ForwardingService : Service() {
                     if (replyTarget != null) {
                         when {
                             reply.authenticatedFromAddress == null ->
-                                "Blocked email-to-SMS request: sender could not be authenticated -- Gmail did not " +
+                                "Blocked email-to-SMS request: sender could not be authenticated -- ${graph.mail.displayName} did not " +
                                     "report an aligned DMARC pass for this sender's domain (check that domain's own " +
                                     "SPF/DKIM/DMARC setup, not just this app's configuration)"
                             reply.referencedMessageIds.isEmpty() ->
@@ -445,7 +445,7 @@ class ForwardingService : Service() {
                     )
                 }
             } catch (_: QueueCapacityException) {
-                graph.repository.recordServiceEvent("Reply queue is full; Gmail command ${reply.id} was left unread for later retry")
+                graph.repository.recordServiceEvent("Reply queue is full; ${graph.mail.displayName} command ${reply.id} was left unread for later retry")
                 return@forEach
             }
             // Marking after the idempotent transaction means a failed modify call

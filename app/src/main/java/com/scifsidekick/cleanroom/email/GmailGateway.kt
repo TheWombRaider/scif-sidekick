@@ -104,8 +104,7 @@ class GmailGateway(
     }
 
     /**
-     * Despite the name (kept to avoid rippling a rename through every call site), this
-     * deliberately does **not** filter on `is:unread` -- it used to, and that was a real,
+     * Deliberately does **not** filter on `is:unread` -- it used to, and that was a real,
      * silent-failure bug for anyone forwarding to the same Gmail account connected for delivery
      * (see docs/DESIGN_NOTES.md "Reply routing"): replying from within an already-open
      * conversation routinely delivers that self-addressed reply back into the same thread
