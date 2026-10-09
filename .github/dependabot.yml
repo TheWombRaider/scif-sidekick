@@ -11,6 +11,11 @@ updates:
       - dependency-name: "com.google.devtools.ksp*"
       - dependency-name: "com.android.application"
       - dependency-name: "org.jetbrains.kotlinx:kotlinx-serialization*"
+      # Major bumps on the Gmail path are upgraded by hand once they can be tested on a real phone.
+      - dependency-name: "com.squareup.okhttp3:okhttp"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "com.google.android.gms:play-services-auth"
+        update-types: ["version-update:semver-major"]
     groups:
       androidx:
         patterns: ["androidx.*"]
