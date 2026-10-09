@@ -39,6 +39,12 @@ class FakeMailTransport(
     /** Thrown by every [findSent] while set. */
     var findSentFailure: Exception? = null
 
+    /** Thrown by every [checkForBounces] while set. */
+    var bouncesFailure: Exception? = null
+
+    /** Returned by [checkForBounces]. */
+    val bounces = mutableListOf<BounceNotice>()
+
     /** Returned as [CommandScan.unreadable] by [findCommands]. */
     val unreadableCommands = mutableListOf<String>()
 
@@ -126,7 +132,8 @@ class FakeMailTransport(
 
     override suspend fun checkForBounces(): List<BounceNotice> {
         calls += "checkForBounces"
-        return emptyList()
+        bouncesFailure?.let { throw it }
+        return bounces.toList()
     }
 
     override fun clearSession() {

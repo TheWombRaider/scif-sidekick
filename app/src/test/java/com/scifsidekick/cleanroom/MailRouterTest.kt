@@ -1,5 +1,6 @@
 package com.scifsidekick.cleanroom
 
+import com.scifsidekick.cleanroom.email.BounceNotice
 import com.scifsidekick.cleanroom.email.CommandSearch
 import com.scifsidekick.cleanroom.email.MailAuthRequiredException
 import com.scifsidekick.cleanroom.email.MailHttpException
@@ -122,8 +123,9 @@ class MailRouterTest {
             gmail.failNextSendWith = failure
             val receipt = router(gmail, graph).send("k1")
             assertTrue(receipt.messageId.startsWith("graph:"))
-            assertEquals(listOf(failure), authRequired)
-            assertEquals(1, authRequired.count { it === failure })
+            assertSame(failure, authRequired.single())
+            assertEquals(1, gmail.sendCount)
+            assertEquals(1, graph.sendCount)
         }
 
     // 5
@@ -132,8 +134,9 @@ class MailRouterTest {
             gmail.failNextSendWith = MailHttpException(400, "bad request")
             val receipt = router(gmail, graph).send("k1")
             assertTrue(receipt.messageId.startsWith("graph:"))
-            assertFalse("findSent" in gmail.calls)
-            assertTrue(duplicates.isEmpty())
+            assertEquals(listOf("send"), gmail.calls)
+            assertEquals(1, graph.sendCount)
+            assertEquals(emptyList<String>(), duplicates)
         }
 
     // 6
@@ -155,7 +158,12 @@ class MailRouterTest {
             assertTrue(receipt.messageId.startsWith("graph:"))
             assertFalse(receipt.reconciled)
             assertTrue("findSent" in gmail.calls)
-            assertTrue(duplicates.isEmpty())
+            assertEquals(
+                listOf(
+                    "Gmail send failed ambiguously and was not found in Sent yet; trying the next account (possible duplicate if it was accepted)",
+                ),
+                duplicates,
+            )
         }
 
     // 8
@@ -165,7 +173,10 @@ class MailRouterTest {
             gmail.findSentFailure = IOException("offline")
             val receipt = router(gmail, graph).send("k1")
             assertTrue(receipt.messageId.startsWith("graph:"))
-            assertEquals(1, duplicates.size)
+            assertEquals(
+                listOf("Gmail send was ambiguous and could not be verified; trying the next account (possible duplicate)"),
+                duplicates,
+            )
         }
 
     // 9
@@ -325,14 +336,151 @@ class MailRouterTest {
             assertFalse("pollReplies" in graph.calls)
         }
 
-    @Test fun `clearSession reaches every member and findSent returns the first hit`() =
+    @Test fun `clearSession reaches every member, signed in or not`() =
         runBlocking {
             gmail.signedIn = false
+            router(gmail, graph).clearSession()
+            assertEquals(listOf("clearSession"), gmail.calls)
+            assertEquals(listOf("clearSession"), graph.calls)
+        }
+
+    @Test fun `findSent returns the first usable member's receipt`() =
+        runBlocking {
+            val fromGmail = gmail.send("k1")
+            val fromGraph = graph.send("k1")
             val r = router(gmail, graph)
-            r.clearSession()
-            assertTrue("clearSession" in gmail.calls)
-            assertTrue("clearSession" in graph.calls)
-            val sent = graph.send("k1")
-            assertEquals(sent.copy(reconciled = true), r.findSent("k1"))
+            assertEquals(fromGmail.copy(reconciled = true), r.findSent("k1"))
+            gmail.signedIn = false
+            assertEquals(fromGraph.copy(reconciled = true), r.findSent("k1"))
+        }
+
+    @Test fun `a 5xx that actually went out returns the reconciled receipt`() =
+        runBlocking {
+            val first = gmail.send("k1")
+            gmail.failNextSendWith = MailHttpException(503, "unavailable")
+            val receipt = router(gmail, graph).send("k1")
+            assertTrue(receipt.reconciled)
+            assertEquals(first.messageId, receipt.messageId)
+            assertEquals(0, graph.sendCount)
+        }
+
+    @Test fun `a 5xx that did not go out is verified, then falls back`() =
+        runBlocking {
+            gmail.failNextSendWith = MailHttpException(503, "unavailable")
+            val receipt = router(gmail, graph).send("k1")
+            assertTrue(receipt.messageId.startsWith("graph:"))
+            assertEquals(listOf("send", "findSent"), gmail.calls)
+        }
+
+    @Test fun `connection failures before any request are definite`() =
+        runBlocking {
+            for (failure in listOf(java.net.ConnectException("refused"), java.net.UnknownHostException("dns"))) {
+                gmail.calls.clear()
+                gmail.failNextSendWith = failure
+                val receipt = router(gmail, graph).send("k-${failure.javaClass.simpleName}")
+                assertTrue(receipt.messageId.startsWith("graph:"))
+                assertEquals(listOf("send"), gmail.calls)
+            }
+            assertEquals(emptyList<String>(), duplicates)
+        }
+
+    @Test fun `an unknown failure is treated as ambiguous`() =
+        runBlocking {
+            gmail.failNextSendWith = IllegalStateException("odd")
+            val receipt = router(gmail, graph).send("k1")
+            assertTrue(receipt.messageId.startsWith("graph:"))
+            assertEquals(listOf("send", "findSent"), gmail.calls)
+        }
+
+    @Test fun `a failed prior-delivery check does not stop the send and logs a possible duplicate`() =
+        runBlocking {
+            gmail.findSentFailure = IOException("offline")
+            val receipt = router(gmail, graph).send("k1", verify = true)
+            assertFalse(receipt.reconciled)
+            assertEquals(1, gmail.sendCount)
+            assertEquals(
+                listOf("Gmail could not check its Sent folder before a retry; continuing (possible duplicate)"),
+                duplicates,
+            )
+            assertTrue(authRequired.isEmpty())
+        }
+
+    @Test fun `a prior-delivery check needing reconnection alerts instead of logging a duplicate`() =
+        runBlocking {
+            val auth = MailAuthRequiredException("reconnect", "gmail", "Gmail")
+            gmail.findSentFailure = auth
+            val receipt = router(gmail, graph).send("k1", verify = true)
+            assertFalse(receipt.reconciled)
+            assertEquals(1, gmail.sendCount)
+            assertEquals(listOf(auth), authRequired)
+            assertEquals(emptyList<String>(), duplicates)
+        }
+
+    @Test fun `prior delivery through the preferred member is found without asking the fallback`() =
+        runBlocking {
+            val first = gmail.send("k1")
+            val receipt = router(gmail, graph).send("k1", verify = true)
+            assertTrue(receipt.reconciled)
+            assertEquals(first.messageId, receipt.messageId)
+            assertEquals(1, gmail.sendCount)
+            assertTrue(graph.calls.isEmpty())
+        }
+
+    @Test fun `an ambiguous failure on the last member rethrows the first failure without a duplicate log`() =
+        runBlocking {
+            val first = MailHttpException(400, "bad request")
+            gmail.failNextSendWith = first
+            graph.failNextSendWith = SocketTimeoutException("timeout")
+            assertSame(first, thrownBy<MailHttpException> { runBlocking { router(gmail, graph).send("k1") } })
+            assertTrue("findSent" in graph.calls)
+
+            gmail.failNextSendWith = first
+            graph.failNextSendWith = SocketTimeoutException("timeout")
+            graph.findSentFailure = IOException("offline")
+            assertSame(first, thrownBy<MailHttpException> { runBlocking { router(gmail, graph).send("k2") } })
+            assertEquals(emptyList<String>(), duplicates)
+        }
+
+    @Test fun `a lone signed-out member answers send itself`() =
+        runBlocking {
+            gmail.signedIn = false
+            val thrown = thrownBy<MailAuthRequiredException> { runBlocking { router(gmail).send("k1") } }
+            assertEquals("Open the app and reconnect Gmail", thrown.message)
+            assertEquals(listOf("send"), gmail.calls)
+        }
+
+    @Test fun `a failing callback never turns a delivered send into a failure`() =
+        runBlocking {
+            val r =
+                MailRouter(
+                    members = { listOf(gmail, graph) },
+                    onAuthRequired = { error("alert failed") },
+                    onRecovered = { error("clear failed") },
+                    logPossibleDuplicate = { error("log failed") },
+                )
+            assertFalse(r.send("k1").reconciled)
+            gmail.failNextSendWith = MailAuthRequiredException("reconnect", "gmail", "Gmail")
+            assertTrue(r.send("k2").messageId.startsWith("graph:"))
+            gmail.failNextSendWith = SocketTimeoutException("timeout")
+            assertTrue(r.send("k3").messageId.startsWith("graph:"))
+            val single = MailRouter(members = { listOf(gmail) }, onRecovered = { error("clear failed") })
+            assertFalse(single.send("k4").reconciled)
+        }
+
+    @Test fun `checkForBounces concatenates, skips a failing member, and rethrows the first when all fail`() =
+        runBlocking {
+            val r = router(gmail, graph)
+            val a = BounceNotice("a", setOf("rfc-a"), "bounced a")
+            val b = BounceNotice("graph:b", setOf("rfc-b"), "bounced b")
+            gmail.bounces += a
+            graph.bounces += b
+            assertEquals(listOf(a, b), r.checkForBounces())
+
+            graph.bouncesFailure = IOException("graph down")
+            assertEquals(listOf(a), r.checkForBounces())
+
+            val first = IOException("gmail down")
+            gmail.bouncesFailure = first
+            assertSame(first, thrownBy<IOException> { runBlocking { r.checkForBounces() } })
         }
 }

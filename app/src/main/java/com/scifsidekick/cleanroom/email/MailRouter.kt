@@ -42,24 +42,46 @@ class MailRouter(
         verifyPriorDelivery: Boolean,
     ): MailReceipt {
         val usable = usable()
-        if (usable.isEmpty()) throw MailAuthRequiredException("No mail account is connected", providerId, displayName)
+        if (usable.isEmpty()) {
+            // A lone signed-out member answers for itself, so its own exception and message (and
+            // anything else it does when signed out) stay exactly what they are without a router.
+            members().singleOrNull()?.let { return it.send(payload, attachmentPaths, deliveryKey, verifyPriorDelivery) }
+            throw MailAuthRequiredException("No mail account is connected", providerId, displayName)
+        }
         if (usable.size == 1) {
             // No fallback to fail over to: hand the call over unchanged, so the member's own
             // prior-delivery check and failure behavior apply exactly as they do without a router.
             val member = usable.single()
             val receipt = member.send(payload, attachmentPaths, deliveryKey, verifyPriorDelivery)
-            onRecovered(member.providerId)
+            safely { onRecovered(member.providerId) }
             return receipt
         }
+        val absorbedAuth = mutableListOf<MailAuthRequiredException>()
         if (verifyPriorDelivery) {
             for (member in usable) {
-                val found = suspendRunCatching { member.findSent(deliveryKey) }.getOrNull()
-                if (found != null) return found.copy(reconciled = true)
+                val found = suspendRunCatching { member.findSent(deliveryKey) }
+                found.getOrNull()?.let {
+                    reportAbsorbed(absorbedAuth, rethrown = null)
+                    return it.copy(reconciled = true)
+                }
+                // A failed check must not fail the send: that would defeat failover while this
+                // provider is down. Go on, and say a duplicate is possible.
+                found.exceptionOrNull()?.let { failure ->
+                    if (failure is MailAuthRequiredException) {
+                        absorbedAuth += failure
+                    } else {
+                        safely {
+                            logPossibleDuplicate(
+                                "${member.displayName} could not check its Sent folder before a retry; continuing (possible duplicate)",
+                            )
+                        }
+                    }
+                }
             }
         }
         var firstFailure: Throwable? = null
-        val absorbedAuth = mutableListOf<MailAuthRequiredException>()
-        for (member in usable) {
+        for ((index, member) in usable.withIndex()) {
+            val hasNext = index < usable.lastIndex
             val receipt =
                 try {
                     member.send(payload, attachmentPaths, deliveryKey, verifyPriorDelivery = false)
@@ -72,14 +94,21 @@ class MailRouter(
                         Kind.DEFINITE -> Unit
                         Kind.AMBIGUOUS -> {
                             val found = suspendRunCatching { member.findSent(deliveryKey) }
-                            if (found.getOrNull() != null) {
+                            found.getOrNull()?.let {
                                 reportAbsorbed(absorbedAuth, rethrown = null)
-                                return found.getOrThrow()!!.copy(reconciled = true)
+                                return it.copy(reconciled = true)
                             }
-                            if (found.isFailure) {
-                                logPossibleDuplicate(
-                                    "${member.displayName} send was ambiguous and could not be verified; trying the next account (possible duplicate)",
-                                )
+                            val lookupFailure = found.exceptionOrNull()
+                            if (lookupFailure is MailAuthRequiredException) absorbedAuth += lookupFailure
+                            // On the last member nothing else is sent, so no duplicate can follow.
+                            if (hasNext) {
+                                val reason =
+                                    if (found.isFailure) {
+                                        "${member.displayName} send was ambiguous and could not be verified; trying the next account (possible duplicate)"
+                                    } else {
+                                        "${member.displayName} send failed ambiguously and was not found in Sent yet; trying the next account (possible duplicate if it was accepted)"
+                                    }
+                                safely { logPossibleDuplicate(reason) }
                             }
                         }
                     }
@@ -87,7 +116,7 @@ class MailRouter(
                 }
             if (receipt != null) {
                 reportAbsorbed(absorbedAuth, rethrown = null)
-                onRecovered(member.providerId)
+                safely { onRecovered(member.providerId) }
                 return receipt
             }
         }
@@ -151,18 +180,31 @@ class MailRouter(
                 if (failure is MailAuthRequiredException) absorbedAuth += failure
             }
         }
-        succeeded.forEach(onRecovered)
+        succeeded.forEach { safely { onRecovered(it) } }
         val rethrown = if (results.isEmpty()) firstFailure else null
         reportAbsorbed(absorbedAuth, rethrown)
         if (rethrown != null) throw rethrown
         return results
     }
 
-    private fun reportAbsorbed(
+    /**
+     * Alerts for the auth failures the router absorbed, at most once per provider. The failure it
+     * rethrows (and any other from that same provider) is left to the caller, which alerts on it.
+     */
+    private suspend fun reportAbsorbed(
         authFailures: List<MailAuthRequiredException>,
         rethrown: Throwable?,
     ) {
-        authFailures.filter { it !== rethrown }.forEach(onAuthRequired)
+        val callerAlerts = (rethrown as? MailAuthRequiredException)?.providerId
+        authFailures
+            .filter { it !== rethrown && it.providerId != callerAlerts }
+            .distinctBy { it.providerId }
+            .forEach { safely { onAuthRequired(it) } }
+    }
+
+    /** Runs a callback; its failure (other than cancellation) never changes what the router does. */
+    private suspend fun safely(callback: suspend () -> Unit) {
+        suspendRunCatching { callback() }
     }
 
     private enum class Kind { AUTH, DEFINITE, AMBIGUOUS }
