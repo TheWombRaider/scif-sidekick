@@ -2,6 +2,7 @@ package com.scifsidekick.cleanroom
 
 import com.scifsidekick.cleanroom.email.graph.GraphAuthentication
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -293,5 +294,27 @@ class GraphAuthenticationTest {
     @Test fun `unparseable From is rejected`() {
         assertNull(auth(pass, ""))
         assertNull(auth(pass, "not an address"))
+    }
+
+    // Android's java.util.regex treats \w as Unicode (like UNICODE_CHARACTER_CLASS on the JVM), so a
+    // result such as "paſſ" (long s) could be captured there, and ignore-case equals folds ſ to s.
+    @Test fun `a non-ASCII dmarc result is never a pass, even under Android's Unicode regex classes`() {
+        assertNull(auth("dmarc=paſſ header.from=agency.gov"))
+        assertTrue(GraphAuthentication.dmarcClause.pattern.contains("dmarc=([A-Za-z0-9_]+)"))
+        assertFalse(GraphAuthentication.dmarcClause.pattern.contains("\\w"))
+        val androidLike =
+            java.util.regex.Pattern.compile(
+                GraphAuthentication.dmarcClause.pattern,
+                java.util.regex.Pattern.CASE_INSENSITIVE or java.util.regex.Pattern.UNICODE_CASE or
+                    java.util.regex.Pattern.UNICODE_CHARACTER_CLASS,
+            )
+        for (result in listOf("paſſ", "pаss", "paſs", "ｐass")) {
+            val m = androidLike.matcher("dmarc=$result header.from=agency.gov")
+            val accepted = m.find() && GraphAuthentication.dmarcResultPasses(m.group(1))
+            assertFalse("accepted $result", accepted)
+        }
+        assertTrue(GraphAuthentication.dmarcResultPasses("pass"))
+        assertTrue(GraphAuthentication.dmarcResultPasses("PASS"))
+        assertFalse(GraphAuthentication.dmarcResultPasses("paſſ"))
     }
 }

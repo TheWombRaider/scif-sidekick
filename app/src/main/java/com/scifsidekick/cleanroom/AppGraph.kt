@@ -11,6 +11,7 @@ import com.scifsidekick.cleanroom.email.GmailPushGateway
 import com.scifsidekick.cleanroom.email.MailRouter
 import com.scifsidekick.cleanroom.email.MailTransport
 import com.scifsidekick.cleanroom.email.gmailIsMember
+import com.scifsidekick.cleanroom.email.mailAccountStatuses
 import com.scifsidekick.cleanroom.email.mailMemberIds
 import com.scifsidekick.cleanroom.email.graph.GraphGateway
 import com.scifsidekick.cleanroom.email.graph.KeystoreRefreshTokenStore
@@ -117,22 +118,37 @@ class AppGraph private constructor(
             onAuthRequired = { authAlerts.authRequired(it) },
         )
 
-    /** Each account's name and whether it can send now: Gmail first, then Outlook when set up. */
-    fun accountStatuses(): List<Pair<String, Boolean>> =
-        buildList {
-            add("Gmail" to gmail.isAvailable)
-            if (microsoftConfigured()) add("Outlook" to graphMail.isAvailable)
-        }
+    /**
+     * Each account's name and whether it can send now: Gmail first, then Outlook when set up. Gmail
+     * is left out when it is not a member (see [mailAccountStatuses]).
+     */
+    fun accountStatuses(): List<Pair<String, Boolean>> {
+        val microsoft = microsoftConfigured()
+        return mailAccountStatuses(
+            gmailIsMember = gmailIsMember(gmailDisconnectedOnPurpose, microsoft) { gmail.isAvailable },
+            gmailAvailable = { gmail.isAvailable },
+            microsoftConfigured = microsoft,
+            outlookAvailable = { graphMail.isAvailable },
+        )
+    }
 
     /**
      * The status summary every report uses. Gmail alone: exactly what it was before Outlook existed
      * (the Gmail line follows [mail], which is Gmail behind a pass-through router). With Outlook set
-     * up, the Gmail line is Gmail's own state and Outlook gets its own line.
+     * up, the Gmail line is Gmail's own state, or "not connected" when Gmail is not a member, and
+     * Outlook gets its own line.
      */
     suspend fun statusSummary(nowMs: Long): String {
         val accounts = accountStatuses()
-        val gmailAvailable = if (accounts.size == 1) mail.isAvailable else accounts.first().second
-        return repository.buildStatusSummary(gmailAvailable, nowMs, accounts.drop(1))
+        val gmailEntry = accounts.firstOrNull { it.first == "Gmail" }
+        val others = accounts.filter { it !== gmailEntry }
+        val gmailAvailable =
+            when {
+                gmailEntry == null -> false
+                others.isEmpty() -> mail.isAvailable
+                else -> gmailEntry.second
+            }
+        return repository.buildStatusSummary(gmailAvailable, nowMs, others, gmailIsMember = gmailEntry != null)
     }
 
     companion object {

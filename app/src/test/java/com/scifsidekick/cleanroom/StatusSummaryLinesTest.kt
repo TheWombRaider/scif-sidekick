@@ -1,6 +1,7 @@
 package com.scifsidekick.cleanroom
 
 import com.scifsidekick.cleanroom.data.accountLines
+import com.scifsidekick.cleanroom.data.gmailAuthorizationLine
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -22,5 +23,16 @@ class StatusSummaryLinesTest {
             listOf("Outlook authorization: NEEDS RECONNECTING", "Other authorization: OK"),
             accountLines(listOf("Outlook" to false, "Other" to true)),
         )
+    }
+
+    @Test fun `the Gmail line of a Gmail member is unchanged`() {
+        assertEquals("Gmail authorization: OK", gmailAuthorizationLine(gmailAvailable = true))
+        assertEquals("Gmail authorization: NEEDS RECONNECTING", gmailAuthorizationLine(gmailAvailable = false))
+        assertEquals("Gmail authorization: OK", gmailAuthorizationLine(gmailAvailable = true, gmailIsMember = true))
+        assertEquals("Gmail authorization: NEEDS RECONNECTING", gmailAuthorizationLine(gmailAvailable = false, gmailIsMember = true))
+    }
+
+    @Test fun `a Gmail that is not a member reads not connected`() {
+        assertEquals("Gmail authorization: not connected", gmailAuthorizationLine(gmailAvailable = false, gmailIsMember = false))
     }
 }

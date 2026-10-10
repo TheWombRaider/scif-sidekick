@@ -139,4 +139,11 @@ class MicrosoftUiTextTest {
         assertNull(MicrosoftUiText.normalizeClientId("0f1e2d3c-4b5a-6978-8a9b-acbdcedf00g1"))
         assertNull(MicrosoftUiText.normalizeClientId("0f1e2d3c-4b5a-6978 8a9b-acbdcedf0011"))
     }
+
+    // ------------------------------------------------------------------ needsReconnectHint
+
+    @Test fun `the reconnect hint names Gmail only when Gmail is connected`() {
+        assertEquals("Until it is, mail goes through Gmail only.", MicrosoftUiText.needsReconnectHint(gmailConnected = true))
+        assertEquals("Until it is, Outlook mail cannot be sent or read.", MicrosoftUiText.needsReconnectHint(gmailConnected = false))
+    }
 }

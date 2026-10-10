@@ -130,7 +130,7 @@ internal fun MicrosoftAccountCard(
 
                 is MicrosoftUiState.NeedsReconnect -> {
                     Text(MicrosoftUiText.statusLine(state), color = MaterialTheme.colorScheme.error)
-                    Text("Until it is, mail goes through Gmail only.", style = MaterialTheme.typography.bodySmall)
+                    Text(MicrosoftUiText.needsReconnectHint(gmailConnected), style = MaterialTheme.typography.bodySmall)
                     ClientIdSection(clientId = clientId, onClientIdChange = onClientIdChange)
                     ConnectButton(enabled = clientId.isNotBlank(), onConnect = onConnect)
                     TextButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) { Text("Disconnect") }

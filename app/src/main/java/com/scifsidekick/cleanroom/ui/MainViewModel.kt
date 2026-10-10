@@ -14,6 +14,7 @@ import com.scifsidekick.cleanroom.data.EventType
 import com.scifsidekick.cleanroom.data.ForwardingFilterEntity
 import com.scifsidekick.cleanroom.data.ForwardingStateEntity
 import com.scifsidekick.cleanroom.data.REMOTE_GRAPH_SEEDED
+import com.scifsidekick.cleanroom.email.gmailDisconnectedAfterOutlookSignIn
 import com.scifsidekick.cleanroom.email.graph.DeviceCodeResult
 import com.scifsidekick.cleanroom.email.graph.MsAccountPreferences
 import com.scifsidekick.cleanroom.messaging.EmailPayload
@@ -413,7 +414,12 @@ class MainViewModel(
                     is DeviceCodeResult.Connected -> {
                         setSignInProgress(SignInProgress.Connecting)
                         val email = graph.graphMail.accountEmail() ?: result.accountEmail
-                        withContext(Dispatchers.IO) { graph.msPrefs.accountEmail = email }
+                        withContext(Dispatchers.IO) {
+                            graph.msPrefs.accountEmail = email
+                            // Outlook-only install: no Gmail to remind the user about (connecting Gmail clears this).
+                            graph.gmailDisconnectedOnPurpose =
+                                gmailDisconnectedAfterOutlookSignIn(graph.gmailDisconnectedOnPurpose, graph.gmail.isAvailable)
+                        }
                         email?.let { graph.repository.seedRemoteControlSender(it, REMOTE_GRAPH_SEEDED) }
                         withContext(Dispatchers.IO) { graph.authAlerts.recovered(MsAccountPreferences.PROVIDER_GRAPH) }
                         graph.repository.recordEvent(EventType.AUTH, "Outlook connected${email?.let { " ($it)" }.orEmpty()}")

@@ -51,7 +51,7 @@ class ForwardingService : Service() {
     private var lastMaintenanceMs = 0L
     private var lastAuthAlertCheckMs = 0L
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
-    private var lastPostedNotificationKey: Triple<ForwardingStateEntity?, Int, Boolean>? = null
+    private var lastPostedNotificationKey: List<Any?>? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -594,13 +594,15 @@ class ForwardingService : Service() {
      *  post costs one cheap in-memory comparison instead. */
     private suspend fun updateNotification(state: ForwardingStateEntity?) {
         val queued = graph.database.queueDao().queuedCount()
-        val gmailAvailable = graph.mail.isAvailable
-        val key = Triple(state, queued, gmailAvailable)
+        val mailAvailable = graph.mail.isAvailable
+        // Only consulted when no account can send, so the usual tick does not pay for it.
+        val outlookConfigured = !mailAvailable && graph.microsoftConfigured()
+        val key = listOf(state, queued, mailAvailable, outlookConfigured)
         if (key == lastPostedNotificationKey) return
         lastPostedNotificationKey = key
         getSystemService(android.app.NotificationManager::class.java).notify(
             AlertNotifier.FOREGROUND_NOTIFICATION_ID,
-            graph.alerts.foreground(state, queued, gmailAvailable),
+            graph.alerts.foreground(state, queued, mailAvailable, outlookConfigured),
         )
     }
 

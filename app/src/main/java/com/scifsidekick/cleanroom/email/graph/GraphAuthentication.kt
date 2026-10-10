@@ -19,7 +19,9 @@ object GraphAuthentication {
     private val fold = Regex("\\r?\\n[ \\t]+")
     private val dmarcWord = Regex("dmarc", RegexOption.IGNORE_CASE)
     private val asciiDomain = Regex("[A-Za-z0-9.-]+")
-    private val dmarcClause = Regex("(?:^|;)\\s*dmarc=(\\w+)(?=[\\s;]|$)([^;]*)", RegexOption.IGNORE_CASE)
+    // An explicit ASCII class, not \w: on Android \w is Unicode, so a result spelled with U+017F
+    // (long s) would match. Mirrors GmailAuthentication.
+    internal val dmarcClause = Regex("(?:^|;)\\s*dmarc=([A-Za-z0-9_]+)(?=[\\s;]|$)([^;]*)", RegexOption.IGNORE_CASE)
     private val headerFrom = Regex("(?:^|\\s)header\\.from=([^;\\s]+)", RegexOption.IGNORE_CASE)
 
     fun authenticatedFrom(fromHeader: String, internetMessageHeaders: List<Pair<String, String>>): String? {
@@ -33,7 +35,7 @@ object GraphAuthentication {
         if (dmarcWord.findAll(unfolded).count() != 1) return null
         val text = stripCommentsAndQuotes(unfolded) ?: return null
         val clause = dmarcClause.findAll(text).singleOrNull() ?: return null
-        if (!clause.groupValues[1].equals("pass", ignoreCase = true)) return null
+        if (!dmarcResultPasses(clause.groupValues[1])) return null
         val rawAsserted = headerFrom.findAll(clause.groupValues[2]).singleOrNull()?.groupValues?.get(1)
             ?.removeSuffix(".") ?: return null
         // Checked before lowercasing: Locale folding maps U+212A (Kelvin sign) to ASCII 'k'.
@@ -41,6 +43,9 @@ object GraphAuthentication {
         // extractAddress already returns a lowercase address whose domain has no trailing dot.
         return address.takeIf { it.substringAfter('@') == rawAsserted.lowercase(Locale.US) }
     }
+
+    /** Exactly "pass" in any ASCII case. Not equals(ignoreCase = true): that folds U+017F (long s) to "s". */
+    internal fun dmarcResultPasses(result: String): Boolean = result.lowercase(Locale.US) == "pass"
 
     /** Replaces each comment or quoted string with one space; null if any is unterminated or stray. */
     private fun stripCommentsAndQuotes(value: String): String? {

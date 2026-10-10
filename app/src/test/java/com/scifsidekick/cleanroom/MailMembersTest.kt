@@ -1,6 +1,8 @@
 package com.scifsidekick.cleanroom
 
+import com.scifsidekick.cleanroom.email.gmailDisconnectedAfterOutlookSignIn
 import com.scifsidekick.cleanroom.email.gmailIsMember
+import com.scifsidekick.cleanroom.email.mailAccountStatuses
 import com.scifsidekick.cleanroom.email.mailMemberIds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -35,5 +37,28 @@ class MailMembersTest {
     @Test fun `the preferred provider goes first`() {
         assertEquals(listOf("graph", "gmail"), mailMemberIds(false, microsoftConfigured = true, preferGraph = true) { true })
         assertEquals(listOf("gmail", "graph"), mailMemberIds(false, microsoftConfigured = true, preferGraph = false) { true })
+    }
+
+    @Test fun `Gmail-only status lists just Gmail, exactly as before`() {
+        assertEquals(listOf("Gmail" to true), mailAccountStatuses(true, { true }, microsoftConfigured = false) { error("no Outlook") })
+        assertEquals(listOf("Gmail" to false), mailAccountStatuses(true, { false }, microsoftConfigured = false) { error("no Outlook") })
+    }
+
+    @Test fun `with Outlook set up both accounts are listed, Gmail first`() {
+        assertEquals(listOf("Gmail" to false, "Outlook" to true), mailAccountStatuses(true, { false }, microsoftConfigured = true) { true })
+    }
+
+    @Test fun `a Gmail that is not a member is left out of the status list`() {
+        assertEquals(listOf("Outlook" to true), mailAccountStatuses(false, never, microsoftConfigured = true) { true })
+    }
+
+    @Test fun `an Outlook sign-in without a usable Gmail marks Gmail as not wanted`() {
+        assertTrue(gmailDisconnectedAfterOutlookSignIn(current = false, gmailAvailable = false))
+        assertTrue(gmailDisconnectedAfterOutlookSignIn(current = true, gmailAvailable = false))
+    }
+
+    @Test fun `an Outlook sign-in leaves a connected Gmail alone`() {
+        assertFalse(gmailDisconnectedAfterOutlookSignIn(current = false, gmailAvailable = true))
+        assertTrue(gmailDisconnectedAfterOutlookSignIn(current = true, gmailAvailable = true))
     }
 }

@@ -927,6 +927,7 @@ class SidekickRepository(
         gmailAvailable: Boolean,
         nowMs: Long = System.currentTimeMillis(),
         otherAccounts: List<Pair<String, Boolean>> = emptyList(),
+        gmailIsMember: Boolean = true,
     ): String {
         val state = db.stateDao().get()
         val queued = db.queueDao().queuedCount()
@@ -940,7 +941,7 @@ class SidekickRepository(
         return buildString {
             appendLine("Forwarding: ${if (state?.enabled == true) "ON" else "OFF"}")
             appendLine("Service last seen: $serviceSeen")
-            appendLine("Gmail authorization: ${if (gmailAvailable) "OK" else "NEEDS RECONNECTING"}")
+            appendLine(gmailAuthorizationLine(gmailAvailable, gmailIsMember))
             accountLines(otherAccounts).forEach { appendLine(it) }
             appendLine("Email circuit breaker: ${if (state?.emailCircuitOpen == true) "OPEN -- sending is paused" else "closed"}")
             appendLine("Queued and waiting to send: $queued")
@@ -1241,6 +1242,21 @@ class QueueCapacityException : Exception("Queue storage limit reached; command l
 
 /** [SidekickRepository.seedRemoteControlSender]'s once-per-install flag for the Outlook address. */
 const val REMOTE_GRAPH_SEEDED = "remote_graph_seeded"
+
+/**
+ * The status summary's Gmail line. [gmailIsMember] is false only when Gmail was removed on purpose
+ * (or never connected) while Outlook is set up; Gmail-only installs always get OK / NEEDS RECONNECTING.
+ */
+internal fun gmailAuthorizationLine(
+    gmailAvailable: Boolean,
+    gmailIsMember: Boolean = true,
+): String =
+    "Gmail authorization: " +
+        when {
+            !gmailIsMember -> "not connected"
+            gmailAvailable -> "OK"
+            else -> "NEEDS RECONNECTING"
+        }
 
 /** The status summary's line for each account after Gmail, in order. */
 internal fun accountLines(otherAccounts: List<Pair<String, Boolean>>): List<String> =

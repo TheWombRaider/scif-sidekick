@@ -22,6 +22,10 @@ object GmailAuthentication {
     // clause: "arc=pass (i=1 spf=pass spfdomain=x dkim=pass dkdomain=x dmarc=pass fromdomain=x)".
     // A comment with no nesting, quotes or escapes is always removed whole by the stripper, so
     // mentions inside it are not counted against the single-mention rule.
+    // Residual: the exemption assumes Gmail never echoes ")" or ";" from a sender-controlled domain
+    // into the comment's domain fields (spfdomain, dkdomain, fromdomain); if it did, the comment
+    // could end early and text after it would be exempted too. It matters only for From domains
+    // without DMARC. Also listed in docs/TEST_PLAN.md.
     private val arcComment = Regex("(?:^|;)\\s*arc=[A-Za-z0-9_]+\\s*\\(([^()\"\\\\]*)\\)", RegexOption.IGNORE_CASE)
 
     // ASCII classes on purpose: Android's regex engine treats \w as Unicode.

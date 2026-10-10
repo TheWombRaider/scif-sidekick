@@ -22,6 +22,10 @@ object MicrosoftUiText {
             is MicrosoftUiState.Error -> state.message
         }
 
+    /** The line under a Microsoft account that needs reconnecting: Gmail is named only when it is connected. */
+    fun needsReconnectHint(gmailConnected: Boolean): String =
+        if (gmailConnected) "Until it is, mail goes through Gmail only." else "Until it is, Outlook mail cannot be sent or read."
+
     /** "ABCD1234" -> "A B C D 1 2 3 4", so a screen reader reads the code one character at a time. */
     fun spacedCode(code: String): String = code.filterNot(Char::isWhitespace).toList().joinToString(" ")
 

@@ -494,4 +494,68 @@ class MailRouterTest {
             gmail.bouncesFailure = first
             assertSame(first, thrownBy<IOException> { runBlocking { r.checkForBounces() } })
         }
+
+    @Test fun `findSent skips a failing member and finds the message through the next`() =
+        runBlocking {
+            val fromGraph = graph.send("k1")
+            gmail.findSentFailure = IOException("gmail down")
+            assertEquals(fromGraph.copy(reconciled = true), router(gmail, graph).findSent("k1"))
+            assertTrue("findSent" in graph.calls)
+            assertTrue(authRequired.isEmpty())
+        }
+
+    @Test fun `findSent returns null when every member fails`() =
+        runBlocking {
+            graph.send("k1")
+            gmail.findSentFailure = IOException("gmail down")
+            graph.findSentFailure = MailHttpException(503, "graph down")
+            assertNull(router(gmail, graph).findSent("k1"))
+        }
+
+    @Test fun `findSent alerts for an auth failure it skips`() =
+        runBlocking {
+            val fromGraph = graph.send("k1")
+            val auth = MailAuthRequiredException("reconnect", "gmail", "Gmail")
+            gmail.findSentFailure = auth
+            assertEquals(fromGraph.copy(reconciled = true), router(gmail, graph).findSent("k1"))
+            assertEquals(listOf(auth), authRequired)
+        }
+
+    @Test fun `findSent never swallows cancellation, and a single member still rethrows its own failure`() =
+        runBlocking {
+            graph.send("k1")
+            gmail.findSentFailure = CancellationException("cancelled")
+            thrownBy<CancellationException> { runBlocking { router(gmail, graph).findSent("k1") } }
+            assertFalse("findSent" in graph.calls)
+
+            val own = IOException("gmail down")
+            gmail.findSentFailure = own
+            assertSame(own, thrownBy<IOException> { runBlocking { router(gmail).findSent("k1") } })
+        }
+
+    @Test fun `cancellation inside a guarded callback is never swallowed`() =
+        runBlocking {
+            fun cancelling(
+                recovered: Boolean = false,
+                auth: Boolean = false,
+                duplicate: Boolean = false,
+            ) = MailRouter(
+                members = { listOf(gmail, graph) },
+                onAuthRequired = { if (auth) throw CancellationException("cancelled") },
+                onRecovered = { if (recovered) throw CancellationException("cancelled") },
+                logPossibleDuplicate = { if (duplicate) throw CancellationException("cancelled") },
+            )
+            thrownBy<CancellationException> { runBlocking { cancelling(recovered = true).send("k1") } }
+            thrownBy<CancellationException> { runBlocking { cancelling(recovered = true).pollReplies(emptySet()) } }
+
+            gmail.failNextSendWith = MailAuthRequiredException("reconnect", "gmail", "Gmail")
+            thrownBy<CancellationException> { runBlocking { cancelling(auth = true).send("k2") } }
+
+            gmail.failNextSendWith = SocketTimeoutException("timeout")
+            thrownBy<CancellationException> { runBlocking { cancelling(duplicate = true).send("k3") } }
+
+            gmail.findSentFailure = MailAuthRequiredException("reconnect", "gmail", "Gmail")
+            thrownBy<CancellationException> { runBlocking { cancelling(auth = true).findSent("k4") } }
+            Unit
+        }
 }

@@ -135,11 +135,30 @@ class MailRouter(
         throw failure
     }
 
+    /**
+     * The first usable member's receipt for [deliveryKey]. With one usable member the call is handed
+     * over unchanged, so its failure is rethrown as is. With several, a member whose lookup fails is
+     * skipped (an auth failure is alerted), and null means no member that answered has it.
+     */
     override suspend fun findSent(deliveryKey: String): MailReceipt? {
-        for (member in usable()) {
-            member.findSent(deliveryKey)?.let { return it }
+        val usable = usable()
+        usable.singleOrNull()?.let { return it.findSent(deliveryKey) }
+        val absorbedAuth = mutableListOf<MailAuthRequiredException>()
+        var receipt: MailReceipt? = null
+        for (member in usable) {
+            receipt =
+                try {
+                    member.findSent(deliveryKey)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    if (failure is MailAuthRequiredException) absorbedAuth += failure
+                    null
+                }
+            if (receipt != null) break
         }
-        return null
+        reportAbsorbed(absorbedAuth, rethrown = null)
+        return receipt
     }
 
     override suspend fun pollReplies(knownMessageIds: Set<String>): MailPollResult {

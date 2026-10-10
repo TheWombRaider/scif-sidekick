@@ -143,6 +143,7 @@ class AuthAlertCoordinator(
                 )
             }
     }
+
     private fun shown(providerId: String): Boolean? {
         if (providerId in knownHidden) return false
         val showing =

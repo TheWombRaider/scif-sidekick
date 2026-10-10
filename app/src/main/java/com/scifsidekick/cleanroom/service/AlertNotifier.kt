@@ -40,15 +40,10 @@ class AlertNotifier(
     fun foreground(
         state: ForwardingStateEntity?,
         queued: Int? = null,
-        gmailAvailable: Boolean = true,
+        mailAvailable: Boolean = true,
+        outlookConfigured: Boolean = false,
     ): Notification {
-        val text =
-            when {
-                state?.emailCircuitOpen == true -> "Forwarding paused — too many failures"
-                state?.enabled == true && !gmailAvailable -> "Forwarding waiting for Gmail connection"
-                state?.enabled == true -> "Forwarding active${queued?.let { " • $it queued" }.orEmpty()}"
-                else -> "Forwarding is off"
-            }
+        val text = foregroundText(state, queued, mailAvailable, outlookConfigured)
         return NotificationCompat
             .Builder(context, SERVICE_CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
@@ -140,6 +135,24 @@ class AlertNotifier(
         )
 
     companion object {
+        /**
+         * The foreground notification's text. [mailAvailable]: some mail account can send now.
+         * Without Outlook set up the texts are exactly the Gmail-only ones.
+         */
+        fun foregroundText(
+            state: ForwardingStateEntity?,
+            queued: Int?,
+            mailAvailable: Boolean,
+            outlookConfigured: Boolean = false,
+        ): String =
+            when {
+                state?.emailCircuitOpen == true -> "Forwarding paused — too many failures"
+                state?.enabled == true && !mailAvailable ->
+                    if (outlookConfigured) "Forwarding waiting for a mail connection" else "Forwarding waiting for Gmail connection"
+                state?.enabled == true -> "Forwarding active${queued?.let { " • $it queued" }.orEmpty()}"
+                else -> "Forwarding is off"
+            }
+
         const val LEGACY_SERVICE_CHANNEL_V1 = "forwarding_service_v1"
         const val LEGACY_SERVICE_CHANNEL_V2 = "forwarding_service_v2"
         const val SERVICE_CHANNEL = "forwarding_service_v3"

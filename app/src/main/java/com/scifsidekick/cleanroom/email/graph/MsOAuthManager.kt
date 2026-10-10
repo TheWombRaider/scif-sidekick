@@ -230,8 +230,12 @@ class MsOAuthManager(
                 // is neither stored nor cached. A newer sign-in's access token is still fine to use.
                 if (store.read() != refreshToken) return valid() ?: throw authRequired()
                 // Rotation: persist the new refresh token before handing out the access token, and
-                // never replace a stored token with a blank one. If it cannot be saved, the old refresh
-                // token stays in the store and the new access token is still good for this hour.
+                // never replace a stored token with a blank one. If it cannot be saved, the new access
+                // token is still good for this hour. What the store then holds depends on where the
+                // write failed: before the commit (encryption) the old refresh token stays everywhere;
+                // if commit() returns false, SharedPreferences' in-memory map already has the new
+                // token (so this process keeps reading it) while the disk keeps the old one, which is
+                // what a restarted process reads and which Microsoft may already have retired.
                 string(json, "refresh_token")?.let { rotated ->
                     try {
                         tokenChanged()
