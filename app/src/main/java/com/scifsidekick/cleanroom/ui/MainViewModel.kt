@@ -15,6 +15,7 @@ import com.scifsidekick.cleanroom.data.ForwardingFilterEntity
 import com.scifsidekick.cleanroom.data.ForwardingStateEntity
 import com.scifsidekick.cleanroom.data.REMOTE_GRAPH_SEEDED
 import com.scifsidekick.cleanroom.email.gmailDisconnectedAfterOutlookSignIn
+import com.scifsidekick.cleanroom.email.gmailEverConnected
 import com.scifsidekick.cleanroom.email.graph.DeviceCodeResult
 import com.scifsidekick.cleanroom.email.graph.MsAccountPreferences
 import com.scifsidekick.cleanroom.messaging.EmailPayload
@@ -416,9 +417,11 @@ class MainViewModel(
                         val email = graph.graphMail.accountEmail() ?: result.accountEmail
                         withContext(Dispatchers.IO) {
                             graph.msPrefs.accountEmail = email
-                            // Outlook-only install: no Gmail to remind the user about (connecting Gmail clears this).
+                            // Outlook-only install (Gmail never connected): no Gmail to remind the user about.
+                            // An expired Gmail stays a member so it is still alerted. Connecting Gmail clears this.
+                            val everConnected = gmailEverConnected(graph.repository.remoteOwnerSeeded(), graph.gmail.isAvailable)
                             graph.gmailDisconnectedOnPurpose =
-                                gmailDisconnectedAfterOutlookSignIn(graph.gmailDisconnectedOnPurpose, graph.gmail.isAvailable)
+                                gmailDisconnectedAfterOutlookSignIn(graph.gmailDisconnectedOnPurpose, everConnected)
                         }
                         email?.let { graph.repository.seedRemoteControlSender(it, REMOTE_GRAPH_SEEDED) }
                         withContext(Dispatchers.IO) { graph.authAlerts.recovered(MsAccountPreferences.PROVIDER_GRAPH) }

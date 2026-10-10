@@ -1,6 +1,7 @@
 package com.scifsidekick.cleanroom
 
 import com.scifsidekick.cleanroom.email.gmailDisconnectedAfterOutlookSignIn
+import com.scifsidekick.cleanroom.email.gmailEverConnected
 import com.scifsidekick.cleanroom.email.gmailIsMember
 import com.scifsidekick.cleanroom.email.mailAccountStatuses
 import com.scifsidekick.cleanroom.email.mailMemberIds
@@ -52,13 +53,30 @@ class MailMembersTest {
         assertEquals(listOf("Outlook" to true), mailAccountStatuses(false, never, microsoftConfigured = true) { true })
     }
 
-    @Test fun `an Outlook sign-in without a usable Gmail marks Gmail as not wanted`() {
-        assertTrue(gmailDisconnectedAfterOutlookSignIn(current = false, gmailAvailable = false))
-        assertTrue(gmailDisconnectedAfterOutlookSignIn(current = true, gmailAvailable = false))
+    private fun afterOutlookSignIn(
+        current: Boolean,
+        remoteOwnerSeeded: Boolean,
+        gmailAuthorized: Boolean,
+    ) = gmailDisconnectedAfterOutlookSignIn(current, gmailEverConnected(remoteOwnerSeeded, gmailAuthorized))
+
+    @Test fun `a fresh Outlook-only install marks Gmail as not wanted`() {
+        assertFalse(gmailEverConnected(remoteOwnerSeeded = false, gmailAuthorized = false))
+        assertTrue(afterOutlookSignIn(current = false, remoteOwnerSeeded = false, gmailAuthorized = false))
     }
 
-    @Test fun `an Outlook sign-in leaves a connected Gmail alone`() {
-        assertFalse(gmailDisconnectedAfterOutlookSignIn(current = false, gmailAvailable = true))
-        assertTrue(gmailDisconnectedAfterOutlookSignIn(current = true, gmailAvailable = true))
+    @Test fun `an expired Gmail is not marked, so its reconnect alert keeps working`() {
+        assertTrue(gmailEverConnected(remoteOwnerSeeded = true, gmailAuthorized = false))
+        assertFalse(afterOutlookSignIn(current = false, remoteOwnerSeeded = true, gmailAuthorized = false))
+    }
+
+    @Test fun `a connected Gmail is not marked`() {
+        assertTrue(gmailEverConnected(remoteOwnerSeeded = false, gmailAuthorized = true))
+        assertFalse(afterOutlookSignIn(current = false, remoteOwnerSeeded = true, gmailAuthorized = true))
+        assertFalse(afterOutlookSignIn(current = false, remoteOwnerSeeded = false, gmailAuthorized = true))
+    }
+
+    @Test fun `an Outlook sign-in never clears the flag`() {
+        assertTrue(afterOutlookSignIn(current = true, remoteOwnerSeeded = true, gmailAuthorized = true))
+        assertTrue(afterOutlookSignIn(current = true, remoteOwnerSeeded = false, gmailAuthorized = false))
     }
 }

@@ -237,6 +237,10 @@ class SidekickRepository(
      */
     suspend fun seedRemoteControlOwnerIfEmpty(accountEmail: String) = seedRemoteControlSender(accountEmail, REMOTE_OWNER_SEEDED)
 
+    /** Whether the Gmail owner seeding has run: set the first time Gmail connected on this install. */
+    fun remoteOwnerSeeded(): Boolean =
+        context.getSharedPreferences(SETUP_FLAGS, Context.MODE_PRIVATE).getBoolean(REMOTE_OWNER_SEEDED, false)
+
     /**
      * Authorizes a newly connected mailbox's own address for all four remote commands, once per
      * install per [flagKey]: after the flag is set it never runs again, so an address the owner

@@ -2,7 +2,7 @@ package com.scifsidekick.cleanroom.email
 
 /**
  * Whether Gmail is one of the router's members. It always is, except when the user disconnected
- * it on purpose (or signed in to Outlook without a connected Gmail, see
+ * it on purpose (or signed in to Outlook on an install where Gmail was never connected, see
  * [gmailDisconnectedAfterOutlookSignIn]) and a Microsoft account is set up: then a removed Gmail
  * is not alerted as needing reconnection, and status summaries say "Gmail authorization: not
  * connected" instead of "NEEDS RECONNECTING" (see [mailAccountStatuses]). A Gmail that is signed
@@ -50,14 +50,24 @@ fun mailAccountStatuses(
     }
 
 /**
- * The "Gmail disconnected on purpose" flag after an Outlook sign-in succeeds. Set when Gmail is
- * not available, so an Outlook-only install is not alerted to reconnect a Gmail it never had;
- * otherwise left as it was. Connecting Gmail clears it again.
+ * The "Gmail disconnected on purpose" flag after an Outlook sign-in succeeds. Set only when Gmail
+ * was never connected on this install, so an Outlook-only install is not alerted to reconnect a
+ * Gmail it never had. A Gmail that was connected and is merely signed out (expired) is left a
+ * member, so its "Reconnect Gmail" alert keeps working. Never cleared here; connecting Gmail does.
  */
 fun gmailDisconnectedAfterOutlookSignIn(
     current: Boolean,
-    gmailAvailable: Boolean,
-): Boolean = current || !gmailAvailable
+    gmailEverConnected: Boolean,
+): Boolean = current || !gmailEverConnected
+
+/**
+ * Whether Gmail has ever been connected on this install: its owner address was seeded (the
+ * one-time setup flag set the first time Gmail connects) or it is authorized now.
+ */
+fun gmailEverConnected(
+    remoteOwnerSeeded: Boolean,
+    gmailAuthorized: Boolean,
+): Boolean = remoteOwnerSeeded || gmailAuthorized
 
 private const val GMAIL = "gmail"
 private const val GRAPH = "graph"
