@@ -40,14 +40,11 @@ import java.util.Base64
 import java.util.concurrent.TimeUnit
 
 /**
- * [MailTransport] over Microsoft Graph (Outlook.com and Microsoft 365), polled (Graph has no push
- * here). Every id it returns is `graph:<native id>` (see [MailIds]); native ids are immutable ids
- * (`Prefer: IdType="ImmutableId"` on every request), so a sent draft keeps its id in Sent Items.
+ * [MailTransport] over Microsoft Graph (Outlook.com and Microsoft 365), polled. Ids are
+ * `graph:<native id>` (see [MailIds]), immutable (`Prefer: IdType="ImmutableId"`) so a sent draft keeps its id.
  *
- * All OData filters are limited to `receivedDateTime ge`, `isRead eq` and `internetMessageId eq`;
- * subject and sender matching is done here, so the service cannot reject a query as too complex.
- *
- * No token or message body is ever logged or put in an exception message.
+ * OData filters stay on `receivedDateTime ge`, `isRead eq` and `internetMessageId eq`; subject and
+ * sender matching happens here so Graph cannot reject a query as too complex. No token or body is logged.
  */
 class GraphGateway(
     private val oauth: MsOAuthManager,
@@ -67,9 +64,8 @@ class GraphGateway(
 
     @Volatile private var profileEmailAddress: String? = null
 
-    // In memory only: losing them to process death just costs one full sweep on the next poll.
-    // The poll cursor is the newest receivedDateTime Graph has shown us (server time, so a wrong
-    // phone clock cannot open a gap); the sweep timer is the phone's own clock.
+    // In memory only; process death costs one full sweep. The cursor is Graph's own newest
+    // receivedDateTime, so a wrong phone clock cannot open a gap.
     @Volatile private var cursorMs = 0L
 
     @Volatile private var lastFullSweepMs = 0L
@@ -80,8 +76,7 @@ class GraphGateway(
 
     @Volatile private var loggedMissingAuthResults = false
 
-    // Message-IDs Outlook stamped in place of ours, by delivery key, so findSent can still find a send
-    // from this process after an ambiguous failure. Bounded; lost on process death.
+    // Message-IDs Outlook stamped in place of ours, by delivery key, for findSent. Bounded; lost on process death.
     private val rewrittenIds = object : LinkedHashMap<String, String>() {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > MAX_REMEMBERED_REWRITES
     }
@@ -118,11 +113,9 @@ class GraphGateway(
             withContext(Dispatchers.IO) {
                 MimeMessageBuilder.build(payload, attachmentPaths, deliveryKey, fromAddress, maxAttachmentBytes = MAX_ATTACHMENT_SOURCE_BYTES, providerLabel = "Outlook")
             }
-        // Graph takes MIME as standard base64 in a text/plain body (the byte form keeps OkHttp from
-        // adding a charset parameter to the content type).
+        // Graph takes MIME as standard base64 in a text/plain body; the byte form keeps OkHttp from adding a charset.
         val mime = Base64.getEncoder().encodeToString(built.rawBase64Url.base64UrlDecodeBytes())
-        // Graph refuses bodies over about 4 MB. The budget above keeps attachments well under that;
-        // a huge text body could still exceed it, and that is refused here before anything is sent.
+        // Graph refuses bodies over about 4 MB; the attachment budget keeps under it, but a huge text body can still exceed it.
         if (mime.length > MAX_REQUEST_BODY_CHARS) throw GraphApiException(413, "the message is too large for Outlook to send")
         val draft =
             JSONObject(
@@ -149,8 +142,7 @@ class GraphGateway(
                 retryUnavailable = false,
             )
         } catch (failure: Exception) {
-            // A definite failure means the draft was probably not sent: remove it so a retry does not
-            // leave another one behind. After an ambiguous one it may have gone out, so it stays.
+            // Delete the draft only after a definite failure; after an ambiguous one it may have gone out.
             if (failure !is CancellationException && isDefinite(failure)) safely { deleteIfStillDraft(id) }
             throw failure
         }
@@ -163,11 +155,8 @@ class GraphGateway(
     }
 
     /**
-     * Deletes [id] only when Graph still reports it as an unsent draft. With immutable ids a sent
-     * message keeps the draft's id, so a `/send` that went out but answered with an error (for
-     * example a retried call hitting the already-sent item) must not delete the Sent copy: that
-     * would destroy the evidence the router's `findSent` relies on and invite a duplicate.
-     * Any doubt (the check fails, or `isDraft` is missing or false) keeps the item.
+     * Deletes [id] only when Graph still reports it as an unsent draft. A sent message keeps the
+     * draft's id, and deleting the Sent copy would destroy `findSent`'s evidence and invite a duplicate.
      */
     private suspend fun deleteIfStillDraft(id: String) {
         val state = JSONObject(get(url("me", "messages", id) { query("\$select", "isDraft") }))
@@ -210,16 +199,11 @@ class GraphGateway(
     }
 
     /**
-     * Read and unread mail alike (see [MailTransport.pollReplies]): a full 90-day sweep first and
-     * every 6 h, otherwise everything received since 10 minutes before the newest message an
-     * earlier poll saw.
+     * Read and unread mail alike: a 90-day sweep first and every 6 h, otherwise everything received
+     * since 10 minutes before the newest message an earlier poll saw.
      *
-     * A normal poll that could not read all of its window (the page cap was hit with more pages
-     * pending, the paging link was refused, or too many new candidates) keeps the previous cursor,
-     * so the next poll reads the same window again, and brings the next sweep forward to within
-     * [SWEEP_SOON_MS]. A sweep always moves the cursor: it reads the newest [MAX_POLL_PAGES] pages,
-     * and older mail is out of reach of any poll anyway. A sweep that hit the per-poll candidate
-     * cap runs again on the next poll, skipping the ids already returned.
+     * A poll that could not read its whole window keeps the old cursor and pulls the next sweep
+     * forward to [SWEEP_SOON_MS]. A sweep always moves the cursor; one that hit the candidate cap reruns next poll.
      */
     override suspend fun pollReplies(knownMessageIds: Set<String>): MailPollResult {
         if (!isAvailable) return MailPollResult(emptyList(), emptyList())
@@ -498,8 +482,6 @@ class GraphGateway(
         return MailIds.nativeId(messageId)
     }
 
-    // ---- HTTP ----
-
     private class UrlBuilder(
         val builder: HttpUrl.Builder,
     ) {
@@ -536,10 +518,9 @@ class GraphGateway(
         )
 
     /**
-     * Sends [request] with a bearer token. A 401 drops the cached token and retries once with a fresh
-     * one (a second 401 means the user must reconnect); 429, and 503 when [retryUnavailable], wait out
-     * `Retry-After` (at most 60 s) and retry once; anything else that is not 2xx is a [GraphApiException].
-     * A network failure is rethrown as the [IOException] it is.
+     * Sends [request] with a bearer token. A 401 retries once with a fresh token (a second means reconnect);
+     * 429, and 503 when [retryUnavailable], wait out `Retry-After` (max 60 s) and retry once.
+     * Other non-2xx is a [GraphApiException]; a network failure is rethrown as the [IOException].
      */
     private suspend fun execute(
         request: Request.Builder,
@@ -659,10 +640,8 @@ class GraphGateway(
         // An 8 MB image is about 10.7 MB as base64 inside the attachment's JSON.
         const val MAX_ATTACHMENT_RESPONSE_BYTES = 12L * 1024 * 1024
 
-        // Graph refuses request bodies over about 4 MB; stay under 3.5 MB. The bytes are encoded
-        // twice: MIME base64 (4/3, plus CRLF every 76 chars: x 78/76 = x 1.368), then the request's own
-        // base64 (x 4/3), so x 1.825 in all. The ruling's estimate was 1.8; 1.83 is used to stay
-        // under: floor(3_500_000 / 1.83) = 1_912_568 bytes of attachments in total.
+        // Graph refuses bodies over about 4 MB. Attachments are base64'd twice (MIME with CRLFs, then
+        // the request), about x1.825; floor(3_500_000 / 1.83) keeps the body under 3.5 MB.
         const val MAX_ATTACHMENT_SOURCE_BYTES = 1_912_568L
 
         // Headroom above the 3.5 MB target for headers and a long text body; above this, nothing is sent.

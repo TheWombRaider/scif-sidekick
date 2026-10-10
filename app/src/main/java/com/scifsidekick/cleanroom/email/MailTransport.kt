@@ -10,10 +10,8 @@ import com.scifsidekick.cleanroom.messaging.EmailPayload
  * when this provider's own evidence shows the sender is who the `From` header claims (a DMARC pass
  * aligned with the `From` domain). Anything missing, unrecognized or ambiguous is null.
  *
- * Ids are scoped to the provider per [MailIds]: [MailMessage.id], [MailMessage.threadId],
- * [MailReceipt.messageId], [MailReceipt.threadId], [BounceNotice.messageId], and the ids passed to
- * [markRead] and [fetchContent] are unprefixed for Gmail and `<providerId>:<native id>` for any
- * other provider.
+ * Every id in these types, and those passed to [markRead] and [fetchContent], is unprefixed for
+ * Gmail and `<providerId>:<native id>` for any other provider (see [MailIds]).
  */
 interface MailTransport {
     /** Stable lowercase id: "gmail" now, "graph" later. Used as the message-id prefix, see [MailIds]. */

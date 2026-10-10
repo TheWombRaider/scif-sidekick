@@ -18,14 +18,10 @@ object GmailAuthentication {
     private val fold = Regex("\\r?\\n[ \\t]+")
     private val dmarcWord = Regex("dmarc", RegexOption.IGNORE_CASE)
 
-    // Gmail reports an ARC chain's own results, dmarc included, in a plain comment on the arc
-    // clause: "arc=pass (i=1 spf=pass spfdomain=x dkim=pass dkdomain=x dmarc=pass fromdomain=x)".
-    // A comment with no nesting, quotes or escapes is always removed whole by the stripper, so
-    // mentions inside it are not counted against the single-mention rule.
-    // Residual: the exemption assumes Gmail never echoes ")" or ";" from a sender-controlled domain
-    // into the comment's domain fields (spfdomain, dkdomain, fromdomain); if it did, the comment
-    // could end early and text after it would be exempted too. It matters only for From domains
-    // without DMARC. Also listed in docs/TEST_PLAN.md.
+    // Gmail puts the ARC chain's results, dmarc included, in a comment: "arc=pass (i=1 ... dmarc=pass fromdomain=x)".
+    // The stripper removes such a comment whole, so its dmarc mentions are exempt from the single-mention rule.
+    // Residual (docs/TEST_PLAN.md): if Gmail echoed ")" or ";" from a sender-controlled domain into it,
+    // the comment could end early and exempt text after it; only for From domains without DMARC.
     private val arcComment = Regex("(?:^|;)\\s*arc=[A-Za-z0-9_]+\\s*\\(([^()\"\\\\]*)\\)", RegexOption.IGNORE_CASE)
 
     // ASCII classes on purpose: Android's regex engine treats \w as Unicode.
@@ -41,9 +37,8 @@ object GmailAuthentication {
         val trusted = authenticationResults.firstOrNull()?.replace(fold, " ")?.trim() ?: return null
         val authService = trusted.substringBefore(';').trim().lowercase(Locale.US)
         if (authService != "mx.google.com") return null
-        // The raw value must mention "dmarc" exactly once outside Gmail's ARC comment. Stripping
-        // comments could otherwise hide a real failing clause behind a forged comment; this
-        // deliberately also rejects a header whose other comments merely mention the word.
+        // The raw value must mention "dmarc" exactly once outside the ARC comment, else a forged comment
+        // could hide a failing clause. This also rejects headers whose other comments merely say the word.
         val arcMentions = arcComment.findAll(trusted).sumOf { dmarcWord.findAll(it.groupValues[1]).count() }
         if (dmarcWord.findAll(trusted).count() - arcMentions != 1) return null
         val text = stripCommentsAndQuotes(trusted) ?: return null

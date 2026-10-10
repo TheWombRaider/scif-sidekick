@@ -56,16 +56,16 @@ class AppGraph private constructor(
     val graphMail = GraphGateway(msOAuth, client = microsoftHttp, log = { repository.recordServiceEvent(it) })
 
     /**
-     * A Microsoft account is set up when one was connected (its address is remembered) or a token is
-     * stored. A set-up account whose sign-in is gone stays a member, so it is still reported and alerted.
+     * A Microsoft account is set up when its address is remembered or a token is stored. One whose
+     * sign-in is gone stays a member so it is still reported and alerted.
      */
     fun microsoftConfigured(): Boolean = msPrefs.accountEmail != null || msOAuth.isAuthorized
 
     private val mailAccountPrefs = app.getSharedPreferences("mail_accounts_v1", Context.MODE_PRIVATE)
 
     /**
-     * Set when the user disconnects Gmail, cleared when Gmail connects again. With a Microsoft
-     * account set up, a Gmail removed on purpose leaves the router (see [gmailIsMember]).
+     * Set when the user disconnects Gmail, cleared on reconnect. With a Microsoft account set up it
+     * takes Gmail out of the router (see [gmailIsMember]).
      */
     var gmailDisconnectedOnPurpose: Boolean
         get() = mailAccountPrefs.getBoolean(KEY_GMAIL_DISCONNECTED, false)
@@ -119,8 +119,7 @@ class AppGraph private constructor(
         )
 
     /**
-     * Each account's name and whether it can send now: Gmail first, then Outlook when set up. Gmail
-     * is left out when it is not a member (see [mailAccountStatuses]).
+     * Each account's name and whether it can send now, Gmail first; Gmail is left out when it is not a member.
      */
     fun accountStatuses(): List<Pair<String, Boolean>> {
         val microsoft = microsoftConfigured()
@@ -133,10 +132,8 @@ class AppGraph private constructor(
     }
 
     /**
-     * The status summary every report uses. Gmail alone: exactly what it was before Outlook existed
-     * (the Gmail line follows [mail], which is Gmail behind a pass-through router). With Outlook set
-     * up, the Gmail line is Gmail's own state, or "not connected" when Gmail is not a member, and
-     * Outlook gets its own line.
+     * The status summary every report uses. Gmail alone: unchanged from before Outlook. With Outlook
+     * set up, Gmail's line is its own state ("not connected" when not a member) and Outlook gets one.
      */
     suspend fun statusSummary(nowMs: Long): String {
         val accounts = accountStatuses()

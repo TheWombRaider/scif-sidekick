@@ -319,8 +319,6 @@ class MainViewModel(
         messages.tryEmit("Gmail connected")
     }
 
-    // ----------------------------------------------------------------------------- microsoft
-
     private var signInJob: Job? = null
     private var signInProgress: SignInProgress = SignInProgress.None
     private val microsoftStateFlow = MutableStateFlow<MicrosoftUiState>(MicrosoftUiState.NotConfigured)
@@ -365,10 +363,9 @@ class MainViewModel(
     }
 
     /**
-     * Best effort: once the sign-in has left the code step (connected, cancelled, expired, failed),
-     * removes the copied code from the clipboard if it is still the current clip. Android only
-     * lets a focused app read the clipboard, so the activity calls this again with [final] when it
-     * regains focus; [final] forgets the code even when the clip could not be read.
+     * Best effort: once sign-in leaves the code step, removes the copied code if it is still the
+     * current clip. Only a focused app can read the clipboard, so the activity calls this again with
+     * [final] on regaining focus, which forgets the code even if the clip was unreadable.
      */
     fun clearCopiedSignInCode(final: Boolean) {
         val code = copiedSignInCode ?: return

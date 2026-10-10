@@ -43,14 +43,10 @@ import com.scifsidekick.cleanroom.email.graph.MsAccountPreferences
 import kotlinx.coroutines.delay
 
 /**
- * The Microsoft (Outlook.com) account card on Settings. Collapsed to two short lines until the
- * user opts in, so a Gmail-only setup barely notices it. [clientId] is the stored Application
- * (client) ID ("" when unset); [preferred] is [MsAccountPreferences.PROVIDER_GMAIL] or
- * [MsAccountPreferences.PROVIDER_GRAPH]. [account] is the stored account, so a sign-in step
- * (waiting, connecting, failed) still names a stored account and offers **Disconnect**.
- * [onCodeCopied] lets the caller clear the code from the clipboard once the sign-in is over;
- * [onMessage] shows a short confirmation through the screen's snackbar. The device code is shown
- * here only and never logged.
+ * The Microsoft (Outlook.com) account card on Settings, collapsed to two short lines until the user
+ * opts in. [clientId] is the stored Application (client) ID ("" when unset); [account] is the stored
+ * account, so a sign-in step still names it and offers **Disconnect**. [onCodeCopied] lets the
+ * caller clear the code from the clipboard afterwards. The device code is never logged.
  */
 @Composable
 internal fun MicrosoftAccountCard(

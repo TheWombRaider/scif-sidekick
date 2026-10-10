@@ -243,13 +243,10 @@ class SidekickRepository(
 
     /**
      * Authorizes a newly connected mailbox's own address for all four remote commands, once per
-     * install per [flagKey]: after the flag is set it never runs again, so an address the owner
-     * removed stays removed.
+     * install per [flagKey], so an address the owner removed stays removed.
      *
-     * Gmail ([seedRemoteControlOwnerIfEmpty]'s flag) seeds only into an empty list, as it always has.
-     * Any other account ([REMOTE_GRAPH_SEEDED] for Outlook) is added unless it is already listed,
-     * even when the list is not empty: the Gmail owner is usually already there, and a command
-     * mailed from one account to the other is the case this exists for.
+     * Gmail seeds only into an empty list. Other accounts ([REMOTE_GRAPH_SEEDED] for Outlook) are
+     * added unless already listed, so a command mailed from one account to the other works.
      */
     suspend fun seedRemoteControlSender(
         accountEmail: String,

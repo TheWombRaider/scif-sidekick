@@ -7,19 +7,14 @@ import kotlinx.coroutines.CancellationException
 /**
  * A [MailTransport] over several providers, so the app keeps working when one mailbox is down.
  *
- * [members] returns the transports in preference order (preferred first), signed in or not; the
- * router filters on [MailTransport.isAvailable] itself on every call, so members can come and go
- * without re-wiring anything that holds the router.
+ * [members] returns the transports preferred first, signed in or not; the router filters on
+ * [MailTransport.isAvailable] on every call, so members can come and go.
  *
- * With one configured member the router is a pass-through: same identity, same calls, same
- * return values and the same exception objects, so a Gmail-only install behaves exactly as if it
- * talked to Gmail directly.
+ * With one configured member the router is a pass-through (same calls, results and exception
+ * objects), so a Gmail-only install behaves as if it talked to Gmail directly.
  *
- * Alerts: a failure the router rethrows is the caller's to handle, exactly as before the router
- * existed ([com.scifsidekick.cleanroom.service.ForwardingService] and
- * [com.scifsidekick.cleanroom.service.QueueProcessor] already alert on it), so [onAuthRequired]
- * is called only for the [MailAuthRequiredException]s the router absorbs by moving on to another
- * member. That keeps one failure from posting the same notification twice.
+ * [onAuthRequired] fires only for auth failures the router absorbs by moving on; a rethrown one is
+ * the caller's to alert on, which avoids posting the same notification twice.
  */
 class MailRouter(
     private val members: () -> List<MailTransport>,
@@ -34,8 +29,7 @@ class MailRouter(
     private fun usable(): List<MailTransport> = members().filter { it.isAvailable }
 
     /**
-     * The name of the account a send would try first ("Gmail", "Outlook"): the first available
-     * member, else the first member, else [ROUTER_NAME].
+     * The account a send would try first: the first available member, else the first member, else [ROUTER_NAME].
      */
     fun primaryDisplayName(): String {
         val all = members()
@@ -58,8 +52,7 @@ class MailRouter(
             throw MailAuthRequiredException("No mail account is connected", providerId, displayName)
         }
         if (usable.size == 1) {
-            // No fallback to fail over to: hand the call over unchanged, so the member's own
-            // prior-delivery check and failure behavior apply exactly as they do without a router.
+            // Nothing to fail over to: hand the call over unchanged.
             val member = usable.single()
             val receipt = member.send(payload, attachmentPaths, deliveryKey, verifyPriorDelivery)
             safely { onRecovered(member.providerId) }
@@ -136,9 +129,8 @@ class MailRouter(
     }
 
     /**
-     * The first usable member's receipt for [deliveryKey]. With one usable member the call is handed
-     * over unchanged, so its failure is rethrown as is. With several, a member whose lookup fails is
-     * skipped (an auth failure is alerted), and null means no member that answered has it.
+     * The first usable member's receipt for [deliveryKey]. A lone member's failure is rethrown; with
+     * several, a failing lookup is skipped (auth failures alerted) and null means no answering member has it.
      */
     override suspend fun findSent(deliveryKey: String): MailReceipt? {
         val usable = usable()
@@ -189,8 +181,7 @@ class MailRouter(
             ?: throw IllegalArgumentException("No mail account for id $id")
 
     /**
-     * Runs [call] on every usable member in order and returns the successful results. A failing
-     * member is skipped; if every usable member failed, the first failure is rethrown.
+     * Runs [call] on every usable member and returns the successes; rethrows the first failure only if all failed.
      */
     private suspend fun <T> eachUsable(call: suspend (MailTransport) -> T): List<T> {
         val results = mutableListOf<T>()
@@ -216,8 +207,7 @@ class MailRouter(
     }
 
     /**
-     * Alerts for the auth failures the router absorbed, at most once per provider. The failure it
-     * rethrows (and any other from that same provider) is left to the caller, which alerts on it.
+     * Alerts once per provider for absorbed auth failures; the rethrown one (and its provider's) is the caller's.
      */
     private suspend fun reportAbsorbed(
         authFailures: List<MailAuthRequiredException>,

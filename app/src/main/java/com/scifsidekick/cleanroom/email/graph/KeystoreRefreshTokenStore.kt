@@ -70,8 +70,7 @@ class KeystoreRefreshTokenStore(
 
     /**
      * The existing key, or a new one only when the alias is definitely absent. Any Keystore error
-     * (including a transient one) fails this write and leaves the alias alone: replacing a key that
-     * still exists would make the stored ciphertext unreadable for good.
+     * fails the write and leaves the alias alone: replacing a live key would orphan the ciphertext.
      */
     private fun keyForWrite(): SecretKey {
         val keyStore = keyStore()

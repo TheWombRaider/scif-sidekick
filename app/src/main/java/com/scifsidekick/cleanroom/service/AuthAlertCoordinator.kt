@@ -30,15 +30,11 @@ sealed interface AuthAlertAction {
 /**
  * The reconnect-alert decision, per provider:
  *
- * - It needs reconnecting when it is configured (a router member) and either an auth failure was
- *   reported since its last success or it is not available. A provider that is not configured
- *   never needs reconnecting.
- * - A shown alert for a provider that does not need reconnecting is cleared (recovered, reconnected,
- *   or no longer configured).
- * - A missing alert is raised here only when [showUnavailable] is set (service start, or a failure
- *   no single account owns) and the provider is configured and unavailable. Auth failures raise
- *   their alert when they are reported, not on every evaluation, so an alert the user dismissed is
- *   not re-posted every tick.
+ * - Needs reconnecting: configured, and either an auth failure since its last success or unavailable.
+ * - A shown alert that is no longer needed is cleared.
+ * - A missing alert is raised here only with [showUnavailable] (service start, or a failure no
+ *   account owns) for a configured, unavailable provider; auth failures raise theirs when reported,
+ *   so a dismissed alert is not re-posted every tick.
  *
  * An unknown [ProviderAlertState.alertShown] acts: showing or clearing again is harmless.
  */
@@ -59,18 +55,14 @@ fun authAlertActions(
 /**
  * The single owner of the per-provider "Reconnect <provider>" alerts.
  *
- * Decisions come from current state (each provider's [MailTransport.isAvailable], whether it is a
- * configured router member, and whether its alert is actually showing), plus one in-memory fact:
- * the members with an auth failure reported since their last success. That last part covers a
- * provider that fails auth while still reading available (Outlook after a second 401 keeps its
- * refresh token). After process death it is gone and the alerts are re-derived from the rest.
+ * Decisions come from current state ([MailTransport.isAvailable], router membership, whether the
+ * alert is showing) plus the members with an auth failure since their last success, which covers a
+ * provider that fails auth while still reading available (Outlook after a second 401). That set is
+ * lost on process death and the alerts are re-derived.
  *
- * Only configured members, and providers whose alert this coordinator itself posted, are ever
- * looked at, so a Gmail-only install never queries or cancels any id but Gmail's.
- *
- * Every call is serialized and idempotent. [isShowing] is asked only while an alert might be up:
- * once a provider's alert is known to be absent that is remembered until this class shows it again
- * (nothing else posts these alerts; anything else that removes one only makes that more true).
+ * Only configured members and providers this coordinator posted for are touched, so a Gmail-only
+ * install never queries or cancels any id but Gmail's. Calls are serialized and idempotent;
+ * [isShowing] is asked only while an alert might be up, since nothing else posts these alerts.
  */
 class AuthAlertCoordinator(
     /** Every provider that can hold an alert, configured or not. */
@@ -87,10 +79,9 @@ class AuthAlertCoordinator(
     private val postedHere = mutableSetOf<String>()
 
     /**
-     * An auth failure. For a configured account: show its alert unless it is already up. For a
-     * provider that is no longer configured (a call still in flight when it was disconnected):
-     * nothing. For a failure no account owns (the router's own "no account is connected"): alert
-     * each configured signed-out account under its own name, never under the router's.
+     * An auth failure. Configured account: show its alert unless already up. No longer configured
+     * (a call in flight at disconnect): nothing. Owned by no account (the router's "no account is
+     * connected"): alert each configured signed-out account under its own name.
      */
     suspend fun authRequired(failure: MailAuthRequiredException) =
         lock.withLock {

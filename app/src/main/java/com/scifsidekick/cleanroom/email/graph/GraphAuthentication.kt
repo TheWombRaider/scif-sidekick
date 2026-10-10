@@ -5,22 +5,18 @@ import java.util.Locale
 
 /**
  * Converts the topmost Authentication-Results header Microsoft adds at receipt into an
- * authenticated mailbox. A displayable From header alone is never authority, so every
- * ambiguity returns null (fail closed).
+ * authenticated mailbox. A From header alone is never authority; every ambiguity returns null.
  *
- * Accepted only when: the From header yields exactly one safe address; the first
- * Authentication-Results header (list order, later ones ignored) holds exactly one
- * dmarc clause in the documented `dmarc=pass` form; and that clause carries its own single
- * `header.from=` equal to the From domain. There is no relaxed or subdomain alignment.
- * Parenthesised comments and quoted strings are removed before parsing so text hidden in
- * them cannot form a clause.
+ * Accepted only when the From header yields one safe address, the first Authentication-Results
+ * header holds exactly one `dmarc=pass` clause, and that clause carries its own single
+ * `header.from=` equal to the From domain (no relaxed or subdomain alignment). Comments and
+ * quoted strings are removed before parsing so hidden text cannot form a clause.
  */
 object GraphAuthentication {
     private val fold = Regex("\\r?\\n[ \\t]+")
     private val dmarcWord = Regex("dmarc", RegexOption.IGNORE_CASE)
     private val asciiDomain = Regex("[A-Za-z0-9.-]+")
-    // An explicit ASCII class, not \w: on Android \w is Unicode, so a result spelled with U+017F
-    // (long s) would match. Mirrors GmailAuthentication.
+    // ASCII class, not \w: on Android \w is Unicode, so U+017F (long s) would match.
     internal val dmarcClause = Regex("(?:^|;)\\s*dmarc=([A-Za-z0-9_]+)(?=[\\s;]|$)([^;]*)", RegexOption.IGNORE_CASE)
     private val headerFrom = Regex("(?:^|\\s)header\\.from=([^;\\s]+)", RegexOption.IGNORE_CASE)
 
@@ -29,9 +25,7 @@ object GraphAuthentication {
         val first = internetMessageHeaders.firstOrNull { it.first.equals("Authentication-Results", ignoreCase = true) }?.second
             ?: return null
         val unfolded = first.replace(fold, " ").trim()
-        // The raw value must mention "dmarc" exactly once. Stripping comments could otherwise hide
-        // a real failing clause behind a forged comment; this deliberately also rejects a header
-        // whose comment merely mentions the word (fail closed).
+        // The raw value must mention "dmarc" exactly once, else a forged comment could hide a failing clause.
         if (dmarcWord.findAll(unfolded).count() != 1) return null
         val text = stripCommentsAndQuotes(unfolded) ?: return null
         val clause = dmarcClause.findAll(text).singleOrNull() ?: return null

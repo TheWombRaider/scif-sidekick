@@ -1,12 +1,10 @@
 package com.scifsidekick.cleanroom.email
 
 /**
- * Whether Gmail is one of the router's members. It always is, except when the user disconnected
- * it on purpose (or signed in to Outlook on an install where Gmail was never connected, see
- * [gmailDisconnectedAfterOutlookSignIn]) and a Microsoft account is set up: then a removed Gmail
- * is not alerted as needing reconnection, and status summaries say "Gmail authorization: not
- * connected" instead of "NEEDS RECONNECTING" (see [mailAccountStatuses]). A Gmail that is signed
- * in again counts at once. Gmail-only installs always have it.
+ * Whether Gmail is one of the router's members. Always, except when it was disconnected on purpose
+ * (or never connected, see [gmailDisconnectedAfterOutlookSignIn]) and a Microsoft account is set up:
+ * then it is not alerted as needing reconnection and status says "not connected". A Gmail signed in
+ * again counts at once.
  */
 fun gmailIsMember(
     gmailDisconnectedOnPurpose: Boolean,
@@ -34,9 +32,8 @@ fun mailMemberIds(
 }
 
 /**
- * Each account's display name and whether it can send now, Gmail first, then Outlook when a
- * Microsoft account is set up. Gmail is left out when it is not a member ([gmailIsMember] false),
- * so it is not reported as needing reconnection. Gmail-only installs: just `"Gmail" to available`.
+ * Each account's display name and whether it can send now, Gmail first. Gmail is left out when it
+ * is not a member, so it is not reported as needing reconnection.
  */
 fun mailAccountStatuses(
     gmailIsMember: Boolean,
@@ -50,10 +47,9 @@ fun mailAccountStatuses(
     }
 
 /**
- * The "Gmail disconnected on purpose" flag after an Outlook sign-in succeeds. Set only when Gmail
- * was never connected on this install, so an Outlook-only install is not alerted to reconnect a
- * Gmail it never had. A Gmail that was connected and is merely signed out (expired) is left a
- * member, so its "Reconnect Gmail" alert keeps working. Never cleared here; connecting Gmail does.
+ * The "Gmail disconnected on purpose" flag after an Outlook sign-in. Set only when Gmail was never
+ * connected, so an expired Gmail stays a member and keeps its "Reconnect Gmail" alert.
+ * Connecting Gmail clears it.
  */
 fun gmailDisconnectedAfterOutlookSignIn(
     current: Boolean,

@@ -189,11 +189,9 @@ class MsOAuthManager(
      * A valid access token: the cached one until a minute before it expires, otherwise a new one from
      * the stored refresh token. One refresh at a time; callers waiting on the lock reuse its result.
      *
-     * @throws MailAuthRequiredException when there is no stored token or client id, or Microsoft rejects
-     *   the token (`invalid_grant`, which also clears it), unless a sign-in that finished meanwhile
-     *   left a valid access token, which is returned instead.
-     * @throws IOException on a network failure (the stored token is kept).
-     * @throws MailHttpException on any other token-endpoint failure (the stored token is kept).
+     * @throws MailAuthRequiredException with no stored token or client id, or on `invalid_grant` (which clears the token).
+     * @throws IOException on a network failure; the stored token is kept.
+     * @throws MailHttpException on any other token-endpoint failure; the stored token is kept.
      */
     suspend fun freshAccessToken(): String {
         valid()?.let { return it }
@@ -226,16 +224,10 @@ class MsOAuthManager(
             val access = json?.let { string(it, "access_token") } ?: throw MailHttpException(reply.status, "Microsoft sent an unreadable token response")
             var rotationNotSaved = false
             synchronized(stateLock) {
-                // Disconnected, or signed in again, while this request was out: this result is stale and
-                // is neither stored nor cached. A newer sign-in's access token is still fine to use.
+                // Disconnected or signed in again mid-request: this result is stale, so neither store nor cache it.
                 if (store.read() != refreshToken) return valid() ?: throw authRequired()
-                // Rotation: persist the new refresh token before handing out the access token, and
-                // never replace a stored token with a blank one. If it cannot be saved, the new access
-                // token is still good for this hour. What the store then holds depends on where the
-                // write failed: before the commit (encryption) the old refresh token stays everywhere;
-                // if commit() returns false, SharedPreferences' in-memory map already has the new
-                // token (so this process keeps reading it) while the disk keeps the old one, which is
-                // what a restarted process reads and which Microsoft may already have retired.
+                // Persist the rotated refresh token before handing out the access token; never store a blank one.
+                // If commit() fails, memory holds the new token but disk keeps the old one, which Microsoft may have retired.
                 string(json, "refresh_token")?.let { rotated ->
                     try {
                         tokenChanged()
@@ -255,8 +247,7 @@ class MsOAuthManager(
         val error = json?.let { string(it, "error") }
         if (error == "invalid_grant") {
             synchronized(stateLock) {
-                // Only forget the token Microsoft rejected, not one a sign-in stored meanwhile; that
-                // sign-in's access token is still fine to use.
+                // Forget only the rejected token, not one a sign-in stored meanwhile.
                 if (store.read() != refreshToken) return valid() ?: throw authRequired()
                 store.clear()
                 tokenChanged()
