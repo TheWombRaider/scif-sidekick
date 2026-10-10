@@ -28,8 +28,10 @@ data class DeviceCode(
     val intervalSec: Int,
     val message: String,
 ) {
-    // deviceCode is a polling secret; keep it out of logs and crash reports that print this object.
-    override fun toString(): String = "DeviceCode(userCode=$userCode, verificationUri=$verificationUri, expiresInSec=$expiresInSec, intervalSec=$intervalSec)"
+    // deviceCode is a polling secret and userCode is shown in the panel only; keep both out of logs
+    // and crash reports that print this object.
+    override fun toString(): String =
+        "DeviceCode(userCode=<redacted>, verificationUri=$verificationUri, deviceCode=<redacted>, expiresInSec=$expiresInSec, intervalSec=$intervalSec)"
 }
 
 sealed interface DeviceCodeResult {

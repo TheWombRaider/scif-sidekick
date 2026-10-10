@@ -117,6 +117,12 @@ class MainActivity : FragmentActivity() {
         setContent { SidekickApp(viewModel) }
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // Only a focused app may read the clipboard: the moment to drop a finished sign-in's code.
+        if (hasFocus) viewModel.clearCopiedSignInCode(final = true)
+    }
+
     override fun onResume() {
         super.onResume()
         refreshNotificationAccess()
@@ -184,6 +190,7 @@ class MainActivity : FragmentActivity() {
         var pubSubGranted by remember { mutableStateOf(vm.pubSubGranted) }
         var gmailAccountEmail by rememberSaveable { mutableStateOf<String?>(null) }
         val microsoftState by vm.microsoftState.collectAsStateWithLifecycle()
+        val microsoftAccount by vm.microsoftAccount.collectAsStateWithLifecycle()
         var microsoftClientId by remember { mutableStateOf(vm.microsoftClientId) }
         var preferredProvider by remember { mutableStateOf(vm.preferredProvider) }
         var currentScreenName by rememberSaveable { mutableStateOf(AppScreen.HOME.name) }
@@ -444,6 +451,7 @@ class MainActivity : FragmentActivity() {
                                         clientId = microsoftClientId,
                                         preferred = preferredProvider,
                                         gmailConnected = oauthAuthorized,
+                                        account = microsoftAccount,
                                         onClientIdChange = { id ->
                                             vm.setMicrosoftClientId(id)
                                             microsoftClientId = id
@@ -455,6 +463,7 @@ class MainActivity : FragmentActivity() {
                                             vm.setPreferredProvider(provider)
                                             preferredProvider = provider
                                         },
+                                        onCodeCopied = vm::onSignInCodeCopied,
                                         onMessage = { vm.messages.tryEmit(it) },
                                     )
                                     NotificationCoverageCard(

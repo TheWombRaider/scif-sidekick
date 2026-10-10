@@ -326,6 +326,14 @@ class MainViewModel(
     /** The Microsoft (Outlook.com) card. Call [refreshMicrosoftState] when the screen is shown again. */
     val microsoftState: StateFlow<MicrosoftUiState> = microsoftStateFlow.asStateFlow()
 
+    private val microsoftAccountFlow = MutableStateFlow(MicrosoftAccountFacts(email = null, authorized = false))
+
+    /** The stored account alone (no sign-in in progress): drives the Home chip and the card's Disconnect. */
+    val microsoftAccount: StateFlow<MicrosoftAccountFacts> = microsoftAccountFlow.asStateFlow()
+
+    /** A sign-in code the user copied, to clear from the clipboard once that sign-in is over. */
+    private var copiedSignInCode: String? = null
+
     val preferredProvider: String get() = graph.msPrefs.preferredProvider
 
     /** The stored Application (client) ID, "" when unset. */
@@ -340,12 +348,30 @@ class MainViewModel(
         viewModelScope.launch {
             val (clientId, email, authorized) =
                 withContext(Dispatchers.IO) { Triple(graph.msPrefs.clientId, graph.msPrefs.accountEmail, graph.msOAuth.isAuthorized) }
+            microsoftAccountFlow.value = MicrosoftAccountFacts(email, authorized)
             microsoftStateFlow.value = microsoftStateFor(clientId, email, authorized, signInProgress)
         }
 
     private fun setSignInProgress(progress: SignInProgress) {
         signInProgress = progress
         refreshMicrosoftState()
+        if (progress !is SignInProgress.Waiting) clearCopiedSignInCode(final = false)
+    }
+
+    fun onSignInCodeCopied(code: String) {
+        copiedSignInCode = code
+    }
+
+    /**
+     * Best effort: once the sign-in has left the code step (connected, cancelled, expired, failed),
+     * removes the copied code from the clipboard if it is still the current clip. Android only
+     * lets a focused app read the clipboard, so the activity calls this again with [final] when it
+     * regains focus; [final] forgets the code even when the clip could not be read.
+     */
+    fun clearCopiedSignInCode(final: Boolean) {
+        val code = copiedSignInCode ?: return
+        if (signInProgress is SignInProgress.Waiting) return
+        if (SignInCodeClipboard.clearIfCurrent(getApplication(), code) || final) copiedSignInCode = null
     }
 
     fun setMicrosoftClientId(id: String) {

@@ -1,12 +1,6 @@
 package com.scifsidekick.cleanroom.ui
 
-import android.content.ClipData
-import android.content.ClipDescription
-import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
-import android.os.Build
-import android.os.PersistableBundle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -52,8 +46,11 @@ import kotlinx.coroutines.delay
  * The Microsoft (Outlook.com) account card on Settings. Collapsed to two short lines until the
  * user opts in, so a Gmail-only setup barely notices it. [clientId] is the stored Application
  * (client) ID ("" when unset); [preferred] is [MsAccountPreferences.PROVIDER_GMAIL] or
- * [MsAccountPreferences.PROVIDER_GRAPH]. [onMessage] shows a short confirmation through the
- * screen's snackbar. The device code is shown here only and never logged.
+ * [MsAccountPreferences.PROVIDER_GRAPH]. [account] is the stored account, so a sign-in step
+ * (waiting, connecting, failed) still names a stored account and offers **Disconnect**.
+ * [onCodeCopied] lets the caller clear the code from the clipboard once the sign-in is over;
+ * [onMessage] shows a short confirmation through the screen's snackbar. The device code is shown
+ * here only and never logged.
  */
 @Composable
 internal fun MicrosoftAccountCard(
@@ -61,11 +58,13 @@ internal fun MicrosoftAccountCard(
     clientId: String,
     preferred: String,
     gmailConnected: Boolean,
+    account: MicrosoftAccountFacts,
     onClientIdChange: (String) -> Unit,
     onConnect: () -> Unit,
     onCancel: () -> Unit,
     onDisconnect: () -> Unit,
     onPreferredChange: (String) -> Unit,
+    onCodeCopied: (String) -> Unit,
     onMessage: (String) -> Unit,
 ) {
     var setupExpanded by rememberSaveable { mutableStateOf(false) }
@@ -94,9 +93,14 @@ internal fun MicrosoftAccountCard(
                     ConnectButton(enabled = clientId.isNotBlank(), onConnect = onConnect)
                 }
 
-                is MicrosoftUiState.WaitingForCode -> DeviceCodePanel(state = state, onCancel = onCancel, onMessage = onMessage)
+                is MicrosoftUiState.WaitingForCode -> {
+                    StoredAccountLine(account)
+                    DeviceCodePanel(state = state, onCancel = onCancel, onCodeCopied = onCodeCopied, onMessage = onMessage)
+                    StoredAccountDisconnect(account, onDisconnect)
+                }
 
-                MicrosoftUiState.Connecting ->
+                MicrosoftUiState.Connecting -> {
+                    StoredAccountLine(account)
                     Row(
                         Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -105,6 +109,8 @@ internal fun MicrosoftAccountCard(
                         CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
                         Text(MicrosoftUiText.statusLine(state))
                     }
+                    StoredAccountDisconnect(account, onDisconnect)
+                }
 
                 is MicrosoftUiState.Connected -> {
                     Surface(
@@ -131,13 +137,36 @@ internal fun MicrosoftAccountCard(
                 }
 
                 is MicrosoftUiState.Error -> {
+                    StoredAccountLine(account)
                     Text(MicrosoftUiText.statusLine(state), color = MaterialTheme.colorScheme.error)
                     ClientIdSection(clientId = clientId, onClientIdChange = onClientIdChange)
                     Button(onClick = onConnect, enabled = clientId.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Try again") }
+                    StoredAccountDisconnect(account, onDisconnect)
                 }
             }
         }
     }
+}
+
+/** During a sign-in step, names the account already stored on this phone (nothing when none is). */
+@Composable
+private fun StoredAccountLine(account: MicrosoftAccountFacts) {
+    if (!account.stored) return
+    Text(
+        "Current account: ${account.email ?: "Outlook account"}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** Lets a user with a stored (possibly dead) account remove it from any sign-in step. */
+@Composable
+private fun StoredAccountDisconnect(
+    account: MicrosoftAccountFacts,
+    onDisconnect: () -> Unit,
+) {
+    if (!account.stored) return
+    TextButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) { Text("Disconnect") }
 }
 
 @Composable
@@ -215,7 +244,8 @@ private fun ClientIdField(
     clientId: String,
     onClientIdChange: (String) -> Unit,
 ) {
-    var text by rememberSaveable { mutableStateOf(clientId) }
+    // Keyed on the stored ID so a change saved elsewhere never leaves a stale value in the field.
+    var text by rememberSaveable(clientId) { mutableStateOf(clientId) }
     val normalized = MicrosoftUiText.normalizeClientId(text)
     val showError = text.isNotBlank() && normalized == null
     OutlinedTextField(
@@ -247,6 +277,7 @@ private fun ClientIdField(
 private fun DeviceCodePanel(
     state: MicrosoftUiState.WaitingForCode,
     onCancel: () -> Unit,
+    onCodeCopied: (String) -> Unit,
     onMessage: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -258,7 +289,9 @@ private fun DeviceCodePanel(
             delay(1_000L)
         }
     }
-    val trusted = remember(state.uri) { MicrosoftUiText.isTrustedVerificationUri(state.uri) }
+    // The exact trimmed text that was validated is what gets launched.
+    val trustedUri = remember(state.uri) { MicrosoftUiText.trustedVerificationUri(state.uri) }
+    val trusted = trustedUri != null
     Text("On any device, open the page below and enter this code:", style = MaterialTheme.typography.bodySmall)
     Text(
         state.code,
@@ -278,14 +311,16 @@ private fun DeviceCodePanel(
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(
             onClick = {
-                copyCode(context, state.code)
-                onMessage("Code copied")
+                if (SignInCodeClipboard.copy(context, state.code)) {
+                    onCodeCopied(state.code)
+                    if (!SignInCodeClipboard.systemConfirmsCopy) onMessage("Code copied")
+                }
             },
             modifier = Modifier.weight(1f),
         ) { Text("Copy code") }
         Button(
             onClick = {
-                val opened = trusted && runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, state.uri.toUri())) }.isSuccess
+                val opened = trustedUri != null && runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, trustedUri.toUri())) }.isSuccess
                 if (!opened) onMessage("Open ${state.uri} in a browser")
             },
             enabled = trusted,
@@ -298,19 +333,6 @@ private fun DeviceCodePanel(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
-}
-
-/** Copies the short-lived sign-in code, marked sensitive so Android 13+ doesn't preview it. */
-private fun copyCode(
-    context: Context,
-    code: String,
-) {
-    val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
-    val clip = ClipData.newPlainText("Microsoft sign-in code", code)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
-    }
-    clipboard.setPrimaryClip(clip)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

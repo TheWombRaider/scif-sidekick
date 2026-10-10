@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -66,7 +67,7 @@ internal fun HomeScreen(
 ) {
     val listState = rememberLazyListState()
     listState.reportScrollActivity()
-    val microsoftState by vm.microsoftState.collectAsStateWithLifecycle()
+    val microsoftAccount by vm.microsoftAccount.collectAsStateWithLifecycle()
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
@@ -104,7 +105,7 @@ internal fun HomeScreen(
             ConnectionHealthRow(
                 gmailConnected = gmailConnected,
                 onGmailClick = { onNavigate(AppScreen.SETTINGS) },
-                outlook = OutlookChipState.of(microsoftState),
+                outlook = OutlookChipState.of(microsoftAccount.stored, microsoftAccount.authorized),
                 onOutlookClick = { onNavigate(AppScreen.SETTINGS) },
                 rcsGranted = notificationAccessGranted,
                 onRcsClick = onOpenNotificationAccess,
@@ -320,7 +321,7 @@ private fun ConnectionHealthRow(
             FilterChip(
                 selected = outlook == OutlookChipState.OK,
                 onClick = onOutlookClick,
-                label = { Text(if (outlook == OutlookChipState.OK) "Outlook ✓" else "Outlook ⚠", maxLines = 1) },
+                label = { Text(if (outlook == OutlookChipState.OK) "Outlook ✓" else "Outlook ⚠", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 modifier =
                     Modifier.weight(1f).semantics {
                         contentDescription = if (outlook == OutlookChipState.OK) "Outlook connected" else "Outlook needs reconnecting"
@@ -329,23 +330,6 @@ private fun ConnectionHealthRow(
         }
         HealthChip("RCS", rcsGranted, onRcsClick, Modifier.weight(1f))
         HealthChip("Battery", batteryUnrestricted, onBatteryClick, Modifier.weight(1f))
-    }
-}
-
-/** The Home screen's Outlook chip: absent, healthy, or needing a reconnect. */
-private enum class OutlookChipState {
-    HIDDEN,
-    OK,
-    NEEDS_RECONNECT,
-    ;
-
-    companion object {
-        fun of(state: MicrosoftUiState): OutlookChipState =
-            when (state) {
-                is MicrosoftUiState.Connected -> OK
-                is MicrosoftUiState.NeedsReconnect -> NEEDS_RECONNECT
-                else -> HIDDEN
-            }
     }
 }
 
@@ -359,7 +343,7 @@ private fun HealthChip(
     FilterChip(
         selected = ok,
         onClick = onClick,
-        label = { Text(if (ok) "$label ✓" else label, maxLines = 1) },
+        label = { Text(if (ok) "$label ✓" else label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         modifier = modifier,
     )
 }

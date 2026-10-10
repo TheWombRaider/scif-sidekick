@@ -15,7 +15,10 @@ sealed interface MicrosoftUiState {
         val code: String,
         val uri: String,
         val expiresAtMs: Long,
-    ) : MicrosoftUiState
+    ) : MicrosoftUiState {
+        // The user code is shown in the panel only; keep it out of anything that prints this object.
+        override fun toString(): String = "WaitingForCode(code=<redacted>, uri=$uri, expiresAtMs=$expiresAtMs)"
+    }
 
     data object Connecting : MicrosoftUiState
 
@@ -43,7 +46,9 @@ sealed interface SignInProgress {
         val code: String,
         val uri: String,
         val expiresAtMs: Long,
-    ) : SignInProgress
+    ) : SignInProgress {
+        override fun toString(): String = "Waiting(code=<redacted>, uri=$uri, expiresAtMs=$expiresAtMs)"
+    }
 
     data object Connecting : SignInProgress
 
@@ -74,3 +79,35 @@ fun microsoftStateFor(
         connectedEmail != null -> MicrosoftUiState.NeedsReconnect(connectedEmail)
         else -> MicrosoftUiState.Idle(null)
     }
+
+/**
+ * The stored Microsoft account facts, independent of any sign-in in progress: [email] is the
+ * remembered address, [authorized] whether a refresh token is stored.
+ */
+data class MicrosoftAccountFacts(
+    val email: String?,
+    val authorized: Boolean,
+) {
+    /** An account was connected on this phone (and not disconnected), working or not. */
+    val stored: Boolean get() = email != null || authorized
+}
+
+/** The Home screen's Outlook chip, decided from the stored account only, never from a sign-in in progress. */
+enum class OutlookChipState {
+    HIDDEN,
+    OK,
+    WARN,
+    ;
+
+    companion object {
+        fun of(
+            accountStored: Boolean,
+            authorized: Boolean,
+        ): OutlookChipState =
+            when {
+                authorized -> OK
+                accountStored -> WARN
+                else -> HIDDEN
+            }
+    }
+}

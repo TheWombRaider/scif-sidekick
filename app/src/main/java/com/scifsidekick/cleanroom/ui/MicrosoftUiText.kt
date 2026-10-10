@@ -39,18 +39,25 @@ object MicrosoftUiText {
      * Whether [uri] may be opened as the device-code verification page: https on the default port,
      * no user info, and a host that is microsoft.com / microsoftonline.com or a subdomain of either.
      */
-    fun isTrustedVerificationUri(uri: String): Boolean {
+    fun isTrustedVerificationUri(uri: String): Boolean = trustedVerificationUri(uri) != null
+
+    /**
+     * The trimmed [uri] when [isTrustedVerificationUri] accepts it, else null. Launch exactly this
+     * value, so what is opened is what was validated.
+     */
+    fun trustedVerificationUri(uri: String): String? {
+        val trimmed = uri.trim()
         val parsed =
             try {
-                URI(uri.trim())
+                URI(trimmed)
             } catch (_: URISyntaxException) {
-                return false
+                return null
             }
-        if (!parsed.scheme.equals("https", ignoreCase = true)) return false
-        if (parsed.rawUserInfo != null) return false
-        if (parsed.port != -1 && parsed.port != 443) return false
-        val host = parsed.host?.lowercase(Locale.ROOT) ?: return false
-        return TRUSTED_DOMAINS.any { domain -> host == domain || host.endsWith(".$domain") }
+        if (!parsed.scheme.equals("https", ignoreCase = true)) return null
+        if (parsed.rawUserInfo != null) return null
+        if (parsed.port != -1 && parsed.port != 443) return null
+        val host = parsed.host?.lowercase(Locale.ROOT) ?: return null
+        return trimmed.takeIf { TRUSTED_DOMAINS.any { domain -> host == domain || host.endsWith(".$domain") } }
     }
 
     /** The trimmed Application (client) ID when [input] is a GUID, otherwise null. */

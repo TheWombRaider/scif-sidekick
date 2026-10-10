@@ -71,6 +71,20 @@ class MicrosoftUiTextTest {
         assertTrue(MicrosoftUiText.isTrustedVerificationUri("HTTPS://Login.Microsoft.COM/device"))
     }
 
+    @Test fun `an explicit default https port is trusted`() {
+        assertTrue(MicrosoftUiText.isTrustedVerificationUri("https://login.microsoft.com:443/x"))
+    }
+
+    @Test fun `the trusted uri returned for launching is the trimmed, validated text`() {
+        assertEquals(
+            "https://microsoft.com/devicelogin",
+            MicrosoftUiText.trustedVerificationUri("  https://microsoft.com/devicelogin \n"),
+        )
+        assertTrue(MicrosoftUiText.isTrustedVerificationUri("\thttps://microsoft.com/devicelogin "))
+        assertNull(MicrosoftUiText.trustedVerificationUri("  https://microsoft.com.evil.com/ "))
+        assertNull(MicrosoftUiText.trustedVerificationUri("https://microsoft.com@evil.com/"))
+    }
+
     @Test fun `non-https is rejected`() {
         assertFalse(MicrosoftUiText.isTrustedVerificationUri("http://microsoft.com/devicelogin"))
         assertFalse(MicrosoftUiText.isTrustedVerificationUri("javascript:alert(1)"))
