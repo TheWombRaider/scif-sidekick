@@ -19,6 +19,12 @@ class MicrosoftUiStatesTest {
         assertEquals(MicrosoftUiState.NotConfigured, state(clientId = "   "))
     }
 
+    @Test fun `a stored account still shows when the client id is blanked`() {
+        assertEquals(MicrosoftUiState.Connected("me@outlook.com"), state(clientId = "", email = "me@outlook.com", authorized = true))
+        assertEquals(MicrosoftUiState.Connected(""), state(clientId = " ", authorized = true))
+        assertEquals(MicrosoftUiState.NeedsReconnect("me@outlook.com"), state(clientId = "", email = "me@outlook.com"))
+    }
+
     @Test fun `a client id and no account is Idle`() {
         assertEquals(MicrosoftUiState.Idle(null), state())
     }

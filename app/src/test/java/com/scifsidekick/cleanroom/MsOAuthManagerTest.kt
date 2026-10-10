@@ -4,6 +4,7 @@ import com.scifsidekick.cleanroom.email.MailAuthRequiredException
 import com.scifsidekick.cleanroom.email.graph.DeviceCode
 import com.scifsidekick.cleanroom.email.graph.DeviceCodeResult
 import com.scifsidekick.cleanroom.email.graph.MsOAuthManager
+import com.scifsidekick.cleanroom.email.graph.RefreshTokenStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -505,6 +506,61 @@ class MsOAuthManagerTest {
             assertEquals(0, store.clears)
             assertEquals(ACCESS_1, mgr.freshAccessToken()) // cached
             assertEquals(1, seen.size)
+        }
+
+    /** Counts reads, which are Keystore decrypts in the real store. */
+    private class CountingStore(
+        initial: String?,
+    ) : RefreshTokenStore {
+        val inner = InMemoryRefreshTokenStore(initial)
+        var reads = 0
+
+        override fun read(): String? {
+            reads++
+            return inner.read()
+        }
+
+        override fun write(token: String) = inner.write(token)
+
+        override fun clear() = inner.clear()
+    }
+
+    private fun countingManager(
+        store: CountingStore,
+        client: OkHttpClient = scripted(),
+    ) = MsOAuthManager(clientId = { CLIENT_ID }, store = store, client = client, nowMs = { now }, delayMs = { delays += it })
+
+    @Test fun `isAuthorized reads the store once while a token stays stored`() {
+        val store = CountingStore(REFRESH_1)
+        val mgr = countingManager(store)
+        repeat(5) { assertTrue(mgr.isAuthorized) }
+        assertEquals(1, store.reads)
+    }
+
+    @Test fun `isAuthorized is false right after disconnect and true right after a sign-in`() =
+        runBlocking {
+            val store = CountingStore(REFRESH_1)
+            val mgr = countingManager(store, scripted(200 to tokens(access = ACCESS_1, refresh = REFRESH_2)))
+            assertTrue(mgr.isAuthorized)
+            mgr.disconnect()
+            assertFalse(mgr.isAuthorized)
+            assertFalse(mgr.isAuthorized)
+            assertTrue(mgr.awaitDeviceCode(code()) is DeviceCodeResult.Connected)
+            assertTrue(mgr.isAuthorized)
+            assertEquals(REFRESH_2, store.inner.read())
+        }
+
+    @Test fun `isAuthorized is false right after Microsoft rejects the token`() =
+        runBlocking {
+            val store = CountingStore(REFRESH_1)
+            val mgr = countingManager(store, scripted(400 to error("invalid_grant")))
+            assertTrue(mgr.isAuthorized)
+            try {
+                mgr.freshAccessToken()
+                fail("expected MailAuthRequiredException")
+            } catch (_: MailAuthRequiredException) {
+            }
+            assertFalse(mgr.isAuthorized)
         }
 
     @Test fun `a failed rotation write leaves a secret-free breadcrumb, a successful one none`() =

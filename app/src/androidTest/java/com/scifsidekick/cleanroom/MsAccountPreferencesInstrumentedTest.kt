@@ -41,7 +41,6 @@ class MsAccountPreferencesInstrumentedTest {
         assertEquals("", prefs.clientId)
         assertNull(prefs.accountEmail)
         assertEquals("gmail", prefs.preferredProvider)
-        assertFalse(prefs.graphSeeded)
     }
 
     @Test fun preferredProviderAcceptsOnlyGmailOrGraph() {
@@ -59,14 +58,12 @@ class MsAccountPreferencesInstrumentedTest {
         prefs.clientId = " 11111111-2222-3333-4444-555555555555 "
         prefs.accountEmail = "me@outlook.com"
         prefs.preferredProvider = "graph"
-        prefs.graphSeeded = true
         prefs.clearAccount()
 
         val reread = MsAccountPreferences(context)
         assertEquals("11111111-2222-3333-4444-555555555555", reread.clientId)
         assertEquals("graph", reread.preferredProvider)
         assertNull(reread.accountEmail)
-        assertFalse(reread.graphSeeded)
     }
 
     @Test fun storesNoToken() {
@@ -74,7 +71,6 @@ class MsAccountPreferencesInstrumentedTest {
         prefs.clientId = "id"
         prefs.accountEmail = "me@outlook.com"
         prefs.preferredProvider = "graph"
-        prefs.graphSeeded = true
         assertFalse(raw.contains(KeystoreRefreshTokenStore.PREF_KEY))
         assertTrue(raw.all.keys.none { "token" in it || it == "rt" })
     }

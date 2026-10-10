@@ -55,7 +55,9 @@ sealed interface SignInProgress {
 /**
  * The card state from the stored settings ([clientId], the remembered [connectedEmail]), whether a
  * refresh token is stored ([authorized]) and the sign-in in progress. A sign-in in progress or its
- * failure wins over the stored state; a remembered address without a token needs reconnecting.
+ * failure wins over the stored state; a remembered address without a token needs reconnecting. A
+ * blank client id means NotConfigured only when no account is stored: a connected account still
+ * shows as Connected or NeedsReconnect.
  */
 fun microsoftStateFor(
     clientId: String,
@@ -67,7 +69,7 @@ fun microsoftStateFor(
         signIn is SignInProgress.Waiting -> MicrosoftUiState.WaitingForCode(signIn.code, signIn.uri, signIn.expiresAtMs)
         signIn is SignInProgress.Connecting -> MicrosoftUiState.Connecting
         signIn is SignInProgress.Failed -> MicrosoftUiState.Error(signIn.message)
-        clientId.isBlank() -> MicrosoftUiState.NotConfigured
+        clientId.isBlank() && connectedEmail == null && !authorized -> MicrosoftUiState.NotConfigured
         authorized -> MicrosoftUiState.Connected(connectedEmail.orEmpty())
         connectedEmail != null -> MicrosoftUiState.NeedsReconnect(connectedEmail)
         else -> MicrosoftUiState.Idle(null)

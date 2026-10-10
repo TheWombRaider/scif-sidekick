@@ -148,14 +148,18 @@ class AlertNotifier(
         const val CIRCUIT_NOTIFICATION_ID = 4102
         const val AUTHORIZATION_NOTIFICATION_ID = 4103
         const val DELIVERY_REVIEW_NOTIFICATION_ID = 4104
+        const val GRAPH_AUTHORIZATION_NOTIFICATION_ID = 4110
+        const val OTHER_AUTHORIZATION_NOTIFICATION_ID = 4111
 
-        /** Gmail keeps the original id; Graph sits one above it; anything else two above. */
+        /**
+         * Gmail keeps the original reconnect id; Outlook and anything else get their own, clear of
+         * every other id above (NotificationIdsTest checks that every *_NOTIFICATION_ID is distinct).
+         */
         internal fun authorizationNotificationId(providerId: String): Int =
-            AUTHORIZATION_NOTIFICATION_ID +
-                when (providerId) {
-                    "gmail" -> 0
-                    "graph" -> 1
-                    else -> 2
-                }
+            when (providerId) {
+                "gmail" -> AUTHORIZATION_NOTIFICATION_ID
+                "graph" -> GRAPH_AUTHORIZATION_NOTIFICATION_ID
+                else -> OTHER_AUTHORIZATION_NOTIFICATION_ID
+            }
     }
 }

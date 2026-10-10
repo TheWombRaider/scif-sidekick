@@ -108,9 +108,14 @@ class MainViewModel(
                 messages.emit("Grant SMS receive and send permissions before enabling forwarding")
                 return@launch
             }
-            if (enabled && !graph.oauth.isAuthorized && !graph.debug.fakeEmailTransport) {
-                messages.emit("Connect Gmail before enabling forwarding")
-                return@launch
+            if (enabled && !graph.debug.fakeEmailTransport) {
+                // Any connected account will do: Gmail, or Outlook when it is set up. Gmail-only
+                // installs see exactly the old check and text (the router is Gmail alone there).
+                val (anyAvailable, outlookSetUp) = withContext(Dispatchers.IO) { graph.mail.isAvailable to graph.microsoftConfigured() }
+                if (!anyAvailable) {
+                    messages.emit(if (outlookSetUp) "Connect Gmail or Outlook before enabling forwarding" else "Connect Gmail before enabling forwarding")
+                    return@launch
+                }
             }
             graph.repository.setForwarding(enabled)
             if (enabled) {
@@ -275,7 +280,10 @@ class MainViewModel(
 
     fun disconnectGmail() =
         viewModelScope.launch {
-            if (state.value.enabled) graph.repository.setForwarding(false)
+            // Outlook, when it is connected, keeps forwarding going; otherwise switch it off as before.
+            val outlookCarriesOn = withContext(Dispatchers.IO) { graph.microsoftConfigured() && graph.graphMail.isAvailable }
+            if (state.value.enabled && !outlookCarriesOn) graph.repository.setForwarding(false)
+            graph.gmailDisconnectedOnPurpose = true
             // Fetched before disconnect() clears the token it needs -- the one reliable way to
             // recover an account to revoke against when the deprecated sign-in bridge disconnect()
             // otherwise falls back to has come back empty. See GmailOAuthManager.disconnect's own
@@ -286,22 +294,25 @@ class MainViewModel(
             graph.alerts.clearAuthorizationRequired()
             graph.repository.recordEvent(
                 EventType.AUTH,
-                if (revoked) {
-                    "Gmail access revoked; forwarding switched off and queued email retained"
-                } else {
-                    "Local Gmail access disabled, but Google grant revocation could not be confirmed; forwarding switched off"
+                when {
+                    outlookCarriesOn && revoked -> "Gmail access revoked; Outlook keeps forwarding"
+                    outlookCarriesOn -> "Local Gmail access disabled, but Google grant revocation could not be confirmed; Outlook keeps forwarding"
+                    revoked -> "Gmail access revoked; forwarding switched off and queued email retained"
+                    else -> "Local Gmail access disabled, but Google grant revocation could not be confirmed; forwarding switched off"
                 },
             )
             messages.emit(
-                if (revoked) {
-                    "Gmail disconnected and access revoked; forwarding switched off"
-                } else {
-                    "Local Gmail access disabled; remove SCIF Sidekick in Google Account permissions if needed"
+                when {
+                    outlookCarriesOn && revoked -> "Gmail disconnected and access revoked; Outlook keeps forwarding"
+                    outlookCarriesOn -> "Local Gmail access disabled; Outlook keeps forwarding. Remove SCIF Sidekick in Google Account permissions if needed"
+                    revoked -> "Gmail disconnected and access revoked; forwarding switched off"
+                    else -> "Local Gmail access disabled; remove SCIF Sidekick in Google Account permissions if needed"
                 },
             )
         }
 
     fun onGmailConnected() {
+        graph.gmailDisconnectedOnPurpose = false
         graph.alerts.clearAuthorizationRequired()
         messages.tryEmit("Gmail connected")
     }
@@ -375,7 +386,7 @@ class MainViewModel(
                         val email = graph.graphMail.accountEmail() ?: result.accountEmail
                         withContext(Dispatchers.IO) { graph.msPrefs.accountEmail = email }
                         email?.let { graph.repository.seedRemoteControlSender(it, REMOTE_GRAPH_SEEDED) }
-                        graph.authAlerts.recovered(MsAccountPreferences.PROVIDER_GRAPH)
+                        withContext(Dispatchers.IO) { graph.authAlerts.recovered(MsAccountPreferences.PROVIDER_GRAPH) }
                         graph.repository.recordEvent(EventType.AUTH, "Outlook connected${email?.let { " ($it)" }.orEmpty()}")
                         setSignInProgress(SignInProgress.None)
                         messages.emit("Outlook connected")
@@ -402,7 +413,7 @@ class MainViewModel(
                 graph.msPrefs.clearAccount()
             }
             graph.graphMail.clearSession()
-            graph.authAlerts.disconnected(MsAccountPreferences.PROVIDER_GRAPH)
+            withContext(Dispatchers.IO) { graph.authAlerts.disconnected(MsAccountPreferences.PROVIDER_GRAPH) }
             graph.repository.recordEvent(EventType.AUTH, "Outlook disconnected on this phone")
             setSignInProgress(SignInProgress.None)
             messages.emit("Outlook disconnected")
@@ -511,7 +522,7 @@ class MainViewModel(
     fun sendTestReceipt() =
         viewModelScope.launch {
             val message =
-                when (val outcome = suspendRunCatching { SelfTestReceipt.send(getApplication(), graph) }.getOrNull()) {
+                when (val outcome = suspendRunCatching { withContext(Dispatchers.IO) { SelfTestReceipt.send(getApplication(), graph) } }.getOrNull()) {
                     is SelfTestReceipt.Outcome.Queued ->
                         "Test receipt queued to ${outcome.recipient} via ${outcome.via}. It should arrive within a minute or two."
                     SelfTestReceipt.Outcome.NotConnected -> "Connect Gmail before sending a test receipt"

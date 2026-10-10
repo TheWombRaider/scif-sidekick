@@ -77,7 +77,23 @@ class MsOAuthManager(
     // that finishes after a disconnect or a new sign-in cannot write back or clear the wrong token.
     private val stateLock = Any()
 
-    val isAuthorized: Boolean get() = store.read() != null
+    // Only "a token is stored" is cached: reading the store decrypts with the Keystore, and the
+    // router asks this on almost every call. Every change to the stored token resets it.
+    @Volatile private var tokenStored = false
+
+    /** Whether a refresh token is stored. A positive answer is cached until the stored token changes. */
+    val isAuthorized: Boolean
+        get() {
+            if (tokenStored) return true
+            // Under the state lock, so a disconnect cannot land between the read and the cache write.
+            synchronized(stateLock) {
+                return (store.read() != null).also { if (it) tokenStored = true }
+            }
+        }
+
+    private fun tokenChanged() {
+        tokenStored = false
+    }
 
     suspend fun startDeviceCode(): DeviceCode {
         val id = requireClientId()
@@ -157,6 +173,7 @@ class MsOAuthManager(
         if (access == null || refresh == null) return DeviceCodeResult.Failed(NO_REFRESH_TOKEN)
         try {
             synchronized(stateLock) {
+                tokenChanged()
                 store.write(refresh)
                 cache(access, json)
             }
@@ -184,7 +201,11 @@ class MsOAuthManager(
     private fun valid(): String? = cached?.takeIf { nowMs() < it.expiresAtMs - EXPIRY_MARGIN_MS }?.value
 
     private suspend fun refresh(): String {
-        val refreshToken = store.read() ?: throw authRequired()
+        val refreshToken =
+            store.read() ?: run {
+                tokenChanged()
+                throw authRequired()
+            }
         val id = clientId()?.trim().orEmpty()
         if (id.isEmpty()) throw authRequired()
         val reply =
@@ -211,6 +232,7 @@ class MsOAuthManager(
                 // token stays in the store and the new access token is still good for this hour.
                 string(json, "refresh_token")?.let { rotated ->
                     try {
+                        tokenChanged()
                         store.write(rotated)
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
@@ -231,6 +253,7 @@ class MsOAuthManager(
                 // sign-in's access token is still fine to use.
                 if (store.read() != refreshToken) return valid() ?: throw authRequired()
                 store.clear()
+                tokenChanged()
                 cached = null
             }
             throw authRequired()
@@ -245,6 +268,7 @@ class MsOAuthManager(
     fun disconnect() {
         synchronized(stateLock) {
             store.clear()
+            tokenChanged()
             cached = null
         }
     }

@@ -30,13 +30,15 @@ sealed interface AuthAlertAction {
 /**
  * The reconnect-alert decision, per provider:
  *
- * - It needs reconnecting when an auth failure was reported since its last success, or when it is
- *   configured (a router member) but not available.
+ * - It needs reconnecting when it is configured (a router member) and either an auth failure was
+ *   reported since its last success or it is not available. A provider that is not configured
+ *   never needs reconnecting.
  * - A shown alert for a provider that does not need reconnecting is cleared (recovered, reconnected,
  *   or no longer configured).
- * - A missing alert is raised here only when [showUnavailable] is set (service start) and the
- *   provider is configured and unavailable. Auth failures raise their alert when they are reported,
- *   not on every evaluation, so an alert the user dismissed is not re-posted every tick.
+ * - A missing alert is raised here only when [showUnavailable] is set (service start, or a failure
+ *   no single account owns) and the provider is configured and unavailable. Auth failures raise
+ *   their alert when they are reported, not on every evaluation, so an alert the user dismissed is
+ *   not re-posted every tick.
  *
  * An unknown [ProviderAlertState.alertShown] acts: showing or clearing again is harmless.
  */
@@ -45,9 +47,9 @@ fun authAlertActions(
     showUnavailable: Boolean,
 ): List<AuthAlertAction> =
     states.mapNotNull { s ->
-        val needsReconnect = s.authFailed || (s.configured && !s.available)
+        val needsReconnect = s.configured && (s.authFailed || !s.available)
         when {
-            needsReconnect && s.alertShown != true && showUnavailable && s.configured && !s.available ->
+            needsReconnect && s.alertShown != true && showUnavailable && !s.available ->
                 AuthAlertAction.Show(s.providerId, s.displayName)
             !needsReconnect && s.alertShown != false -> AuthAlertAction.Clear(s.providerId)
             else -> null
@@ -59,9 +61,12 @@ fun authAlertActions(
  *
  * Decisions come from current state (each provider's [MailTransport.isAvailable], whether it is a
  * configured router member, and whether its alert is actually showing), plus one in-memory fact:
- * the providers with an auth failure reported since their last success. That last part covers a
+ * the members with an auth failure reported since their last success. That last part covers a
  * provider that fails auth while still reading available (Outlook after a second 401 keeps its
  * refresh token). After process death it is gone and the alerts are re-derived from the rest.
+ *
+ * Only configured members, and providers whose alert this coordinator itself posted, are ever
+ * looked at, so a Gmail-only install never queries or cancels any id but Gmail's.
  *
  * Every call is serialized and idempotent. [isShowing] is asked only while an alert might be up:
  * once a provider's alert is known to be absent that is remembered until this class shows it again
@@ -79,12 +84,25 @@ class AuthAlertCoordinator(
     private val lock = Mutex()
     private val authFailed = mutableSetOf<String>()
     private val knownHidden = mutableSetOf<String>()
+    private val postedHere = mutableSetOf<String>()
 
-    /** An auth failure for [failure]'s provider: show its alert unless it is already up. */
+    /**
+     * An auth failure. For a configured account: show its alert unless it is already up. For a
+     * provider that is no longer configured (a call still in flight when it was disconnected):
+     * nothing. For a failure no account owns (the router's own "no account is connected"): alert
+     * each configured signed-out account under its own name, never under the router's.
+     */
     suspend fun authRequired(failure: MailAuthRequiredException) =
         lock.withLock {
-            authFailed += failure.providerId
-            if (shown(failure.providerId) != true) doShow(failure.providerId, failure.displayName)
+            val id = failure.providerId
+            when {
+                configured().any { it.providerId == id } -> {
+                    authFailed += id
+                    if (shown(id) != true) doShow(id, failure.displayName)
+                }
+                providers().any { it.providerId == id } -> Unit
+                else -> apply(authAlertActions(states(), showUnavailable = true))
+            }
         }
 
     /** A call through [providerId] succeeded: its alert, if any, is cleared. */
@@ -108,11 +126,12 @@ class AuthAlertCoordinator(
         }
 
     private fun states(only: String? = null): List<ProviderAlertState> {
-        val members = configured()
+        val memberIds = configured().map { it.providerId }.toSet()
+        authFailed.retainAll(memberIds)
         return providers()
-            .filter { only == null || it.providerId == only }
+            .filter { (only == null || it.providerId == only) && (it.providerId in memberIds || it.providerId in postedHere) }
             .map { provider ->
-                val isMember = members.any { it.providerId == provider.providerId }
+                val isMember = provider.providerId in memberIds
                 ProviderAlertState(
                     providerId = provider.providerId,
                     displayName = provider.displayName,
@@ -124,7 +143,6 @@ class AuthAlertCoordinator(
                 )
             }
     }
-
     private fun shown(providerId: String): Boolean? {
         if (providerId in knownHidden) return false
         val showing =
@@ -152,11 +170,13 @@ class AuthAlertCoordinator(
         displayName: String,
     ) {
         knownHidden -= providerId
+        postedHere += providerId
         show(providerId, displayName)
     }
 
     private fun doClear(providerId: String) {
         clear(providerId)
         knownHidden += providerId
+        postedHere -= providerId
     }
 }

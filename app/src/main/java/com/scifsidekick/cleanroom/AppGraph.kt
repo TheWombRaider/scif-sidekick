@@ -1,6 +1,7 @@
 package com.scifsidekick.cleanroom
 
 import android.content.Context
+import androidx.core.content.edit
 import com.scifsidekick.cleanroom.data.SidekickDatabase
 import com.scifsidekick.cleanroom.data.SidekickRepository
 import com.scifsidekick.cleanroom.email.DebugControls
@@ -9,6 +10,8 @@ import com.scifsidekick.cleanroom.email.GmailOAuthManager
 import com.scifsidekick.cleanroom.email.GmailPushGateway
 import com.scifsidekick.cleanroom.email.MailRouter
 import com.scifsidekick.cleanroom.email.MailTransport
+import com.scifsidekick.cleanroom.email.gmailIsMember
+import com.scifsidekick.cleanroom.email.mailMemberIds
 import com.scifsidekick.cleanroom.email.graph.GraphGateway
 import com.scifsidekick.cleanroom.email.graph.KeystoreRefreshTokenStore
 import com.scifsidekick.cleanroom.email.graph.MsAccountPreferences
@@ -57,13 +60,26 @@ class AppGraph private constructor(
      */
     fun microsoftConfigured(): Boolean = msPrefs.accountEmail != null || msOAuth.isAuthorized
 
-    /** The router's members in preference order: Gmail, plus Outlook when set up (first when preferred). */
-    private fun mailMembers(): List<MailTransport> =
-        when {
-            !microsoftConfigured() -> listOf(gmail)
-            msPrefs.preferredProvider == MsAccountPreferences.PROVIDER_GRAPH -> listOf(graphMail, gmail)
-            else -> listOf(gmail, graphMail)
-        }
+    private val mailAccountPrefs = app.getSharedPreferences("mail_accounts_v1", Context.MODE_PRIVATE)
+
+    /**
+     * Set when the user disconnects Gmail, cleared when Gmail connects again. With a Microsoft
+     * account set up, a Gmail removed on purpose leaves the router (see [gmailIsMember]).
+     */
+    var gmailDisconnectedOnPurpose: Boolean
+        get() = mailAccountPrefs.getBoolean(KEY_GMAIL_DISCONNECTED, false)
+        set(value) = mailAccountPrefs.edit { putBoolean(KEY_GMAIL_DISCONNECTED, value) }
+
+    /** The router's members in preference order (see [mailMemberIds]). Gmail-only installs: just Gmail. */
+    private fun mailMembers(): List<MailTransport> {
+        if (!microsoftConfigured()) return listOf(gmail)
+        return mailMemberIds(
+            gmailDisconnectedOnPurpose = gmailDisconnectedOnPurpose,
+            microsoftConfigured = true,
+            preferGraph = msPrefs.preferredProvider == MsAccountPreferences.PROVIDER_GRAPH,
+            gmailAvailable = { gmail.isAvailable },
+        ).map { if (it == gmail.providerId) gmail else graphMail }
+    }
 
     /** The one owner of the per-provider reconnect alerts. */
     val authAlerts =
@@ -120,6 +136,8 @@ class AppGraph private constructor(
     }
 
     companion object {
+        private const val KEY_GMAIL_DISCONNECTED = "gmail_disconnected_on_purpose"
+
         @Volatile private var instance: AppGraph? = null
 
         fun from(context: Context): AppGraph =

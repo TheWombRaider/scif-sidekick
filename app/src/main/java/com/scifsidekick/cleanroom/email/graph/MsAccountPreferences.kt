@@ -30,17 +30,12 @@ class MsAccountPreferences(
         get() = normalizeProvider(prefs.getString(KEY_PREFERRED_PROVIDER, null))
         set(value) = prefs.edit { putString(KEY_PREFERRED_PROVIDER, normalizeProvider(value)) }
 
-    /** Whether the Outlook address has been added to the remote-control senders once. */
-    var graphSeeded: Boolean
-        get() = prefs.getBoolean(KEY_GRAPH_SEEDED, false)
-        set(value) = prefs.edit { putBoolean(KEY_GRAPH_SEEDED, value) }
-
-    /** Forgets the account email and the seeded flag; keeps [clientId] and [preferredProvider]. */
+    /**
+     * Forgets the account email; keeps [clientId] and [preferredProvider]. (The once-per-install
+     * remote-control seeding flag lives with the repository's setup flags, so it survives this.)
+     */
     fun clearAccount() {
-        prefs.edit {
-            remove(KEY_ACCOUNT_EMAIL)
-            remove(KEY_GRAPH_SEEDED)
-        }
+        prefs.edit { remove(KEY_ACCOUNT_EMAIL) }
     }
 
     companion object {
@@ -50,7 +45,6 @@ class MsAccountPreferences(
         private const val KEY_CLIENT_ID = "client_id"
         private const val KEY_ACCOUNT_EMAIL = "account_email"
         private const val KEY_PREFERRED_PROVIDER = "preferred_provider"
-        private const val KEY_GRAPH_SEEDED = "graph_seeded"
 
         fun normalizeProvider(value: String?): String = if (value == PROVIDER_GRAPH) PROVIDER_GRAPH else PROVIDER_GMAIL
     }

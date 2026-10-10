@@ -68,7 +68,7 @@ class GraphSeedingInstrumentedTest {
             assertEquals(listOf(statusOnly), senders())
         }
 
-    @Test fun outlookSeedsIntoAnEmptyListAndDoesNotStopTheGmailOwnerSeeding() =
+    @Test fun outlookSeedsIntoAnEmptyListAndThenGmailOwnerSeedingAddsNothingSinceTheListIsNotEmpty() =
         runBlocking {
             repository.seedRemoteControlSender("me@outlook.com", REMOTE_GRAPH_SEEDED)
             assertEquals(listOf("me@outlook.com"), senders().map { it.address })
