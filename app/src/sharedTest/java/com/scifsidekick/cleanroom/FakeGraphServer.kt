@@ -53,7 +53,10 @@ class FakeGraphServer : Interceptor {
         val bytes: ByteArray,
         /** What the server reports as `size`; defaults to the real size. */
         val declaredSize: Long = bytes.size.toLong(),
-        val odataType: String = "#microsoft.graph.fileAttachment",
+        /** The `@odata.type` annotation; null leaves it out of every response. */
+        val odataType: String? = FILE_ATTACHMENT,
+        /** Sent as `contentBytes` instead of the base64 of [bytes], to model odd encodings. */
+        val contentBytesOverride: String? = null,
     )
 
     class Message(
@@ -84,6 +87,9 @@ class FakeGraphServer : Interceptor {
         class Throw(
             val error: IOException,
         ) : Action
+
+        /** Handle the request twice and answer with the second result, as OkHttp's silent retry would. */
+        data object HandleTwice : Action
 
         class Delay(
             val ms: Long,
@@ -197,6 +203,14 @@ class FakeGraphServer : Interceptor {
         synchronized(lock) { rules += Rule(matching, Action.Throw(error)) }
     }
 
+    /**
+     * The next request matching [matching] reaches the mailbox twice and the client sees only the
+     * second answer: a call that succeeded but whose response was lost and silently retried.
+     */
+    fun handleTwiceNext(matching: (Seen) -> Boolean) {
+        synchronized(lock) { rules += Rule(matching, Action.HandleTwice) }
+    }
+
     /** The next request matching [matching] is held for [ms] before it is handled normally. */
     fun delayNext(
         ms: Long,
@@ -225,6 +239,10 @@ class FakeGraphServer : Interceptor {
             is Action.Reply -> return respond(request, action.code, action.body, action.headers)
             is Action.Throw -> throw action.error
             is Action.Delay -> Thread.sleep(action.ms)
+            Action.HandleTwice -> {
+                graph(request, body).close()
+                return graph(request, body)
+            }
             null -> Unit
         }
         return when (request.url.host) {
@@ -411,7 +429,7 @@ class FakeGraphServer : Interceptor {
     ): Response {
         val message = messages.firstOrNull { it.id == id } ?: return notFound(request)
         val select = select(request, setOf("id", "name", "contentType", "size", "contentBytes", "isInline"), allowed = setOf("\$select"))
-        val values = message.attachments.map { project(attachmentJson(it), select).put("@odata.type", it.odataType) }
+        val values = message.attachments.map { annotated(project(attachmentJson(it), select), it) }
         return ok(request, JSONObject().put("value", JSONArray(values)))
     }
 
@@ -423,7 +441,7 @@ class FakeGraphServer : Interceptor {
         val message = messages.firstOrNull { it.id == id } ?: return notFound(request)
         val found = message.attachments.firstOrNull { it.id == attachmentId } ?: return notFound(request)
         val select = select(request, setOf("id", "name", "contentType", "size", "contentBytes", "isInline"), allowed = setOf("\$select"))
-        return ok(request, project(attachmentJson(found), select).put("@odata.type", found.odataType))
+        return ok(request, annotated(project(attachmentJson(found), select), found))
     }
 
     private fun attachmentJson(a: Attachment): JSONObject {
@@ -434,9 +452,16 @@ class FakeGraphServer : Interceptor {
                 .put("contentType", a.contentType)
                 .put("size", a.declaredSize)
                 .put("isInline", false)
-        if (a.odataType == "#microsoft.graph.fileAttachment") json.put("contentBytes", Base64.getEncoder().encodeToString(a.bytes))
+        if (a.odataType == null || a.odataType == FILE_ATTACHMENT) {
+            json.put("contentBytes", a.contentBytesOverride ?: Base64.getEncoder().encodeToString(a.bytes))
+        }
         return json
     }
+
+    private fun annotated(
+        json: JSONObject,
+        a: Attachment,
+    ): JSONObject = if (a.odataType == null) json else json.put("@odata.type", a.odataType)
 
     // ---- query parsing ----
 
@@ -517,6 +542,7 @@ class FakeGraphServer : Interceptor {
                 .put("internetMessageId", m.internetMessageId)
                 .put("receivedDateTime", iso(m.receivedMs))
                 .put("isRead", m.isRead)
+                .put("isDraft", m.folder == DRAFTS)
                 .put(
                     "from",
                     JSONObject().put(
@@ -603,9 +629,10 @@ class FakeGraphServer : Interceptor {
         const val DRAFTS = "drafts"
         const val IMMUTABLE = "IdType=\"ImmutableId\""
         const val TEXT_BODY = "outlook.body-content-type=\"text\""
+        const val FILE_ATTACHMENT = "#microsoft.graph.fileAttachment"
 
         val MESSAGE_PROPERTIES =
-            setOf("id", "conversationId", "subject", "from", "internetMessageId", "receivedDateTime", "isRead", "body", "internetMessageHeaders")
+            setOf("id", "conversationId", "subject", "from", "internetMessageId", "receivedDateTime", "isRead", "isDraft", "body", "internetMessageHeaders")
 
         private val RECEIVED_GE = Regex("receivedDateTime ge (\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z)")
         private val IS_READ_EQ = Regex("isRead eq (true|false)")

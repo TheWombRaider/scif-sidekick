@@ -6,6 +6,7 @@ import com.scifsidekick.cleanroom.email.MailMessage
 import com.scifsidekick.cleanroom.email.MimeMessageBuilder
 import com.scifsidekick.cleanroom.email.graph.GraphApiException
 import com.scifsidekick.cleanroom.email.graph.GraphGateway
+import com.scifsidekick.cleanroom.email.graph.GraphResponseTooLargeException
 import com.scifsidekick.cleanroom.email.graph.MsOAuthManager
 import com.scifsidekick.cleanroom.messaging.EmailPayload
 import com.scifsidekick.cleanroom.util.RemoteCommandPlanner
@@ -19,7 +20,9 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
+import org.junit.After
 import org.junit.Test
+import java.io.File
 import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
@@ -37,6 +40,24 @@ class GraphGatewayTest {
         GraphGateway(manager, server.client(), nowMs = { server.nowMs }, log = { logs += it }, sleep = { sleeps += it })
 
     private val search = CommandSearch(listOf("[SCIF:ON]", "[SCIF:OFF]"), listOf("owner@example.com", "boss@agency.gov"))
+
+    private val tempFiles = mutableListOf<File>()
+
+    @After fun deleteTempFiles() {
+        tempFiles.forEach { it.delete() }
+    }
+
+    private fun attachmentFile(bytes: Int): String =
+        File.createTempFile("graph", ".jpg").also {
+            it.writeBytes(ByteArray(bytes) { i -> (i % 251).toByte() })
+            tempFiles += it
+        }.path
+
+    private fun createRequest() = server.graphRequests.single { it.method == "POST" && it.path == "/v1.0/me/messages" }
+
+    private fun draftText() = String(server.messagesIn(FakeGraphServer.SENT).single().mime!!, Charsets.UTF_8)
+
+    private val day = 24L * 3_600_000
 
     private fun pass(domain: String) =
         "spf=pass smtp.mailfrom=$domain; dkim=pass header.d=$domain; dmarc=pass action=none header.from=$domain; compauth=pass reason=100"
@@ -178,7 +199,81 @@ class GraphGatewayTest {
             assertEquals(400, e.statusCode)
             assertTrue(server.messagesIn(FakeGraphServer.DRAFTS).isEmpty())
             assertTrue(server.messagesIn(FakeGraphServer.SENT).isEmpty())
-            assertEquals("DELETE", server.graphRequests.last().method)
+            val last = server.graphRequests.takeLast(2)
+            assertEquals("GET", last[0].method)
+            assertEquals("isDraft", last[0].url.queryParameter("\$select"))
+            assertEquals("DELETE", last[1].method)
+        }
+
+    @Test fun `a send that went out but answered 404 on a silent retry keeps the Sent copy`() =
+        runBlocking<Unit> {
+            // The first /send reaches the mailbox; the retry hits an item that is no longer a draft.
+            server.handleTwiceNext { it.path.endsWith("/send") }
+            val e = assertThrows<GraphApiException> { runBlocking { gateway.send(payload(), emptyList(), "key-1", false) } }
+            assertEquals(404, e.statusCode)
+            assertEquals(1, server.messagesIn(FakeGraphServer.SENT).size)
+            assertTrue(server.graphRequests.none { it.method == "DELETE" })
+            assertNotNull(gateway.findSent("key-1"))
+        }
+
+    @Test fun `a draft whose state cannot be checked is not deleted`() =
+        runBlocking<Unit> {
+            server.failNext(400, matching = { it.path.endsWith("/send") })
+            server.failNext(500, matching = { it.method == "GET" && it.url.queryParameter("\$select") == "isDraft" })
+            assertThrows<GraphApiException> { runBlocking { gateway.send(payload(), emptyList(), "key-1", false) } }
+            assertEquals(1, server.messagesIn(FakeGraphServer.DRAFTS).size)
+            assertTrue(server.graphRequests.none { it.method == "DELETE" })
+        }
+
+    @Test fun `a draft whose isDraft state is not reported is not deleted`() =
+        runBlocking<Unit> {
+            server.failNext(400, matching = { it.path.endsWith("/send") })
+            server.failNext(200, body = """{"id":"x"}""", matching = { it.method == "GET" && it.url.queryParameter("\$select") == "isDraft" })
+            assertThrows<GraphApiException> { runBlocking { gateway.send(payload(), emptyList(), "key-1", false) } }
+            assertEquals(1, server.messagesIn(FakeGraphServer.DRAFTS).size)
+            assertTrue(server.graphRequests.none { it.method == "DELETE" })
+        }
+
+    // ---- send size budget ----
+
+    @Test fun `a 2 MB attachment is just over the Graph budget and is left out`() =
+        runBlocking<Unit> {
+            gateway.send(payload(), listOf(attachmentFile(2_000_000)), "key-1", false)
+            assertFalse(draftText().contains("Content-Disposition: attachment"))
+            assertTrue(createRequest().body!!.length < 3_500_000)
+        }
+
+    @Test fun `a 1 MB attachment is attached`() =
+        runBlocking<Unit> {
+            gateway.send(payload(), listOf(attachmentFile(1_000_000)), "key-1", false)
+            assertTrue(draftText().contains("Content-Disposition: attachment"))
+            assertTrue(createRequest().body!!.length < 3_500_000)
+        }
+
+    @Test fun `attachments at the Graph budget still fit under 3_5 MB`() =
+        runBlocking<Unit> {
+            gateway.send(payload(), listOf(attachmentFile(1_912_568)), "key-1", false)
+            assertTrue(draftText().contains("Content-Disposition: attachment"))
+            val length = createRequest().body!!.length
+            assertTrue(length.toString(), length < 3_500_000)
+        }
+
+    @Test fun `a 3 MB attachment is left out with the disclosure and the request stays under 3_5 MB`() =
+        runBlocking<Unit> {
+            gateway.send(payload(), listOf(attachmentFile(3_000_000)), "key-1", false)
+            val mime = draftText()
+            assertFalse(mime.contains("Content-Disposition: attachment"))
+            val body = String(Base64.getMimeDecoder().decode(mime.substringAfterLast("\r\n\r\n").trim()), Charsets.UTF_8)
+            assertTrue(body.contains("Attachment not forwarded: 3000000 bytes"))
+            assertTrue(createRequest().body!!.length < 3_500_000)
+        }
+
+    @Test fun `a message still too large is refused with 413 before anything is sent`() =
+        runBlocking<Unit> {
+            val huge = payload().copy(renderedBody = "z".repeat(3_000_000))
+            val e = assertThrows<GraphApiException> { runBlocking { gateway.send(huge, emptyList(), "key-1", false) } }
+            assertEquals(413, e.statusCode)
+            assertTrue(server.graphRequests.none { it.method == "POST" })
         }
 
     @Test fun `a refused connection on the send step also deletes the draft`() =
@@ -321,6 +416,16 @@ class GraphGatewayTest {
             assertTrue(sleeps.isEmpty())
         }
 
+    @Test fun `a negative, HTTP-date or non-numeric Retry-After is not retried`() =
+        runBlocking<Unit> {
+            for (value in listOf("-5", "Wed, 21 Oct 2015 07:28:00 GMT", "soon")) {
+                server.failNext(429, headers = mapOf("Retry-After" to value))
+                val e = assertThrows<GraphApiException> { runBlocking { gateway.pollReplies(emptySet()) } }
+                assertEquals(value, 429, e.statusCode)
+            }
+            assertTrue(sleeps.isEmpty())
+        }
+
     @Test fun `500 surfaces as GraphApiException with the status and a bounded detail`() =
         runBlocking<Unit> {
             server.failNext(500, body = "x".repeat(5_000))
@@ -350,8 +455,7 @@ class GraphGatewayTest {
     @Test fun `an oversize response body is refused`() =
         runBlocking<Unit> {
             server.failNext(200, body = "{\"value\":[],\"pad\":\"" + "x".repeat(2 * 1024 * 1024) + "\"}")
-            assertThrows<Exception> { runBlocking { gateway.pollReplies(emptySet()) } }
-            Unit
+            assertThrows<GraphResponseTooLargeException> { runBlocking { gateway.pollReplies(emptySet()) } }
         }
 
     // ---- pollReplies ----
@@ -365,40 +469,96 @@ class GraphGatewayTest {
             assertEquals(setOf("graph:$read", "graph:$text"), replies.map { it.id }.toSet())
         }
 
-    @Test fun `pollReplies sweeps 90 days first, then polls an overlap window, then sweeps again after 6 h`() =
+    @Test fun `pollReplies sweeps 90 days first, then polls from the newest message seen, then sweeps again after 6 h`() =
         runBlocking<Unit> {
-            val t0 = server.nowMs
+            deliver("hello")
+            val tm = server.nowMs
             gateway.pollReplies(emptySet())
-            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(t0 - 90L * 24 * 3_600_000)}", filterOf(inboxLists().last()))
             val first = inboxLists().last()
+            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(tm - 90 * day)}", filterOf(first))
             assertEquals("receivedDateTime desc", first.url.queryParameter("\$orderby"))
             assertEquals("50", first.url.queryParameter("\$top"))
             assertEquals("id,conversationId,subject,from,internetMessageId,receivedDateTime", first.url.queryParameter("\$select"))
 
-            server.nowMs = t0 + 30_000
+            server.nowMs = tm + 30_000
             gateway.pollReplies(emptySet())
-            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(t0 - 10L * 60_000)}", filterOf(inboxLists().last()))
+            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(tm - 10L * 60_000)}", filterOf(inboxLists().last()))
 
-            val t2 = t0 + 6L * 3_600_000 + 31_000
-            server.nowMs = t2
+            val later = deliver("later")
+            val tm2 = server.nowMs
             gateway.pollReplies(emptySet())
-            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(t2 - 90L * 24 * 3_600_000)}", filterOf(inboxLists().last()))
+            gateway.pollReplies(emptySet())
+            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(tm2 - 10L * 60_000)}", filterOf(inboxLists().last()))
+
+            // Only an older message left in the window (the newest was moved away): the cursor
+            // never moves backwards.
+            server.message(later)!!.folder = "archive"
+            server.deliver("owner@example.com", "late arrival", "x", receivedMs = tm2 - 5 * 60_000)
+            gateway.pollReplies(emptySet())
+            gateway.pollReplies(emptySet())
+            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(tm2 - 10L * 60_000)}", filterOf(inboxLists().last()))
+
+            val t3 = tm + 6 * 3_600_000L + 60_000
+            server.nowMs = t3
+            gateway.pollReplies(emptySet())
+            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(t3 - 90 * day)}", filterOf(inboxLists().last()))
 
             gateway.clearSession()
             gateway.pollReplies(emptySet())
-            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(t2 - 90L * 24 * 3_600_000)}", filterOf(inboxLists().last()))
+            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(t3 - 90 * day)}", filterOf(inboxLists().last()))
+        }
+
+    @Test fun `the poll cursor follows the server's clock, not the phone's`() =
+        runBlocking<Unit> {
+            for (skew in listOf(3 * 3_600_000L, -3 * 3_600_000L)) {
+                val skewed = GraphGateway(oauth, server.client(), nowMs = { server.nowMs + skew }, sleep = {})
+                deliver("hello $skew")
+                val tm = server.nowMs
+                skewed.pollReplies(emptySet())
+                assertEquals("receivedDateTime ge ${FakeGraphServer.iso(tm + skew - 90 * day)}", filterOf(inboxLists().last()))
+                server.nowMs += 30_000
+                skewed.pollReplies(emptySet())
+                assertEquals("receivedDateTime ge ${FakeGraphServer.iso(tm - 10L * 60_000)}", filterOf(inboxLists().last()))
+            }
+        }
+
+    @Test fun `with no mail seen yet every poll is a sweep`() =
+        runBlocking<Unit> {
+            gateway.pollReplies(emptySet())
+            server.nowMs += 30_000
+            gateway.pollReplies(emptySet())
+            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(server.nowMs - 90 * day)}", filterOf(inboxLists().last()))
         }
 
     @Test fun `a failed poll does not advance the cursor`() =
         runBlocking<Unit> {
-            val t0 = server.nowMs
+            deliver("hello")
+            val tm = server.nowMs
             gateway.pollReplies(emptySet())
-            server.nowMs = t0 + 60_000
+            deliver("newer")
             server.failNext(500, matching = { it.path.endsWith("/inbox/messages") })
             assertThrows<GraphApiException> { runBlocking { gateway.pollReplies(emptySet()) } }
-            server.nowMs = t0 + 120_000
             gateway.pollReplies(emptySet())
-            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(t0 - 10L * 60_000)}", filterOf(inboxLists().last()))
+            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(tm - 10L * 60_000)}", filterOf(inboxLists().last()))
+        }
+
+    @Test fun `a poll cut off by the page cap keeps its cursor and brings the sweep forward`() =
+        runBlocking<Unit> {
+            deliver("hello")
+            val tm = server.nowMs
+            gateway.pollReplies(emptySet())
+            repeat(210) { deliver("newsletter $it") }
+            val before = inboxLists().size
+            gateway.pollReplies(emptySet())
+            assertEquals(4, inboxLists().size - before)
+            // Same window again: the cursor did not move past mail it never read.
+            server.nowMs += 30_000
+            gateway.pollReplies(emptySet())
+            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(tm - 10L * 60_000)}", filterOf(inboxLists().last()))
+            // Within 5 minutes, a sweep instead of waiting 6 h.
+            server.nowMs += 5 * 60_000L
+            gateway.pollReplies(emptySet())
+            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(server.nowMs - 90 * day)}", filterOf(inboxLists().last()))
         }
 
     @Test fun `timestamps are UTC with Z and no fractional seconds`() =
@@ -426,17 +586,28 @@ class GraphGatewayTest {
             assertEquals(4, inboxLists().size)
         }
 
-    @Test fun `a nextLink to another host is never followed`() =
+    @Test fun `a nextLink to another host stops paging, keeps what was read and is logged once`() =
         runBlocking<Unit> {
-            server.failNext(
-                200,
-                body = """{"value":[],"@odata.nextLink":"https://evil.example.com/v1.0/me/mailFolders/inbox/messages?${'$'}skiptoken=1"}""",
-            )
-            try {
-                gateway.pollReplies(emptySet())
-            } catch (_: Exception) {
+            val id = deliver("Re: [SCIF:+15551234567] hi")
+            val summary =
+                JSONObject()
+                    .put("id", id)
+                    .put("subject", "Re: [SCIF:+15551234567] hi")
+                    .put("receivedDateTime", FakeGraphServer.iso(server.nowMs))
+            val page =
+                JSONObject()
+                    .put("value", org.json.JSONArray().put(summary))
+                    .put("@odata.nextLink", "https://evil.example.com/v1.0/me/mailFolders/inbox/messages?\$skiptoken=SECRET")
+                    .toString()
+            repeat(2) {
+                server.failNext(200, body = page, matching = { it.path.endsWith("/inbox/messages") })
+                assertEquals(listOf("graph:$id"), gateway.pollReplies(emptySet()).replies.map { it.id })
             }
             assertTrue(server.requests.none { it.url.host == "evil.example.com" })
+            val pagingLogs = logs.filter { "paging" in it }
+            assertEquals(1, pagingLogs.size)
+            assertFalse(pagingLogs.single().contains("SECRET"))
+            assertFalse(pagingLogs.single().contains("evil"))
         }
 
     @Test fun `pollReplies skips known ids and builds the message from its headers`() =
@@ -496,6 +667,20 @@ class GraphGatewayTest {
             assertNull(gateway.pollReplies(emptySet()).replies.single().authenticatedFromAddress)
         }
 
+    @Test fun `mail without any Authentication-Results header is logged once, without content`() =
+        runBlocking<Unit> {
+            deliver("Re: [SCIF:+1555] signed", authenticated = true)
+            gateway.pollReplies(emptySet())
+            assertTrue(logs.isEmpty())
+            deliver("Re: [SCIF:+1555] first secret", authenticated = false)
+            deliver("Re: [SCIF:+1555] second secret", authenticated = false)
+            server.nowMs += 30_000
+            gateway.pollReplies(emptySet())
+            gateway.clearSession()
+            gateway.pollReplies(emptySet())
+            assertEquals(listOf("Outlook messages arrived without an Authentication-Results header, so senders cannot be authenticated"), logs)
+        }
+
     @Test fun `a per-message failure is reported and the rest of the poll continues`() =
         runBlocking<Unit> {
             val bad = deliver("Re: [SCIF:+1555] one")
@@ -517,6 +702,19 @@ class GraphGatewayTest {
         }
 
     // ---- findCommands ----
+
+    @Test fun `findCommands keeps only unread recent mail with a tag from a listed sender, newest first`() =
+        runBlocking<Unit> {
+            val a = deliver("[SCIF:ON]", from = "owner@example.com")
+            deliver("[SCIF:ON]", from = "stranger@example.com")
+            deliver("Hello", from = "owner@example.com")
+            deliver("[SCIF:ON]", from = "owner@example.com", isRead = true)
+            server.deliver("owner@example.com", "[SCIF:ON]", "old", receivedMs = server.nowMs - 3 * day)
+            val b = deliver("Re: [scif:off] please", from = "Boss <BOSS@agency.gov>")
+            deliver("[SCIF:BOGUS]", from = "boss@agency.gov")
+            val scan = gateway.findCommands(search)
+            assertEquals(listOf("graph:$b", "graph:$a"), scan.candidates.map { it.id })
+        }
 
     @Test fun `findCommands matches tags and senders client-side, newest first, capped`() =
         runBlocking<Unit> {
@@ -596,6 +794,42 @@ class GraphGatewayTest {
             assertNull(gateway.fetchContent(metadataFor(id)).imageBytes)
         }
 
+    @Test fun `an image whose base64 is too long is refused before decoding`() =
+        runBlocking<Unit> {
+            val id = deliver("[SCIF:ON]", body = "x")
+            // Decodes to 3 bytes (the MIME decoder skips the spaces), but the encoded text alone is
+            // longer than an 8 MB image's base64, so it is refused before decoding.
+            val padded = "AQID" + " ".repeat(11_300_000)
+            server.addAttachment(id, FakeGraphServer.Attachment("a1", "odd.png", "image/png", byteArrayOf(1, 2, 3), declaredSize = 3, contentBytesOverride = padded))
+            assertNull(gateway.fetchContent(metadataFor(id)).imageBytes)
+        }
+
+    @Test fun `an attachment listed without a type annotation is judged by its content type`() =
+        runBlocking<Unit> {
+            val id = deliver("[SCIF:ON]", body = "x")
+            server.addAttachment(id, FakeGraphServer.Attachment("a1", "notes.pdf", "application/pdf", byteArrayOf(9), odataType = null))
+            server.addAttachment(id, FakeGraphServer.Attachment("a2", "photo.png", "image/png", byteArrayOf(5, 6), odataType = null))
+            val content = gateway.fetchContent(metadataFor(id))
+            assertEquals("image/png", content.imageMimeType)
+            assertArrayEquals(byteArrayOf(5, 6), content.imageBytes)
+        }
+
+    @Test fun `an item attachment is never taken for an image`() =
+        runBlocking<Unit> {
+            val id = deliver("[SCIF:ON]", body = "x")
+            server.addAttachment(id, FakeGraphServer.Attachment("a1", "fwd", "image/png", byteArrayOf(5), odataType = "#microsoft.graph.itemAttachment"))
+            assertNull(gateway.fetchContent(metadataFor(id)).imageBytes)
+        }
+
+    @Test fun `a body too large to read is dropped and the image still arrives`() =
+        runBlocking<Unit> {
+            val id = deliver("[SCIF:ON]", body = "y".repeat(2_200_000))
+            server.addAttachment(id, FakeGraphServer.Attachment("a1", "photo.png", "image/png", byteArrayOf(1, 2)))
+            val content = gateway.fetchContent(metadataFor(id))
+            assertEquals("", content.body)
+            assertArrayEquals(byteArrayOf(1, 2), content.imageBytes)
+        }
+
     @Test fun `an HTML-only message comes back as the server-converted text`() =
         runBlocking<Unit> {
             val id = deliver("[SCIF:ON]", body = "<p>Hello <b>there</b></p>", htmlOnly = true)
@@ -621,7 +855,9 @@ class GraphGatewayTest {
             val notices = gateway.checkForBounces()
             assertEquals(setOf("graph:$bounce", "graph:$viaHeader"), notices.map { it.messageId }.toSet())
             notices.forEach { assertEquals(setOf(own), it.referencedRfcMessageIds) }
-            inboxLists().forEach { assertTrue(filterOf(it)!!.matches(Regex("receivedDateTime ge \\S+ and isRead eq false"))) }
+            inboxLists().forEach {
+                assertEquals("receivedDateTime ge ${FakeGraphServer.iso(server.nowMs - 7 * day)} and isRead eq false", filterOf(it))
+            }
         }
 
     // ---- session ----

@@ -68,11 +68,17 @@ class GraphGateway(
     @Volatile private var profileEmailAddress: String? = null
 
     // In memory only: losing them to process death just costs one full sweep on the next poll.
-    @Volatile private var lastPollMs = 0L
+    // The poll cursor is the newest receivedDateTime Graph has shown us (server time, so a wrong
+    // phone clock cannot open a gap); the sweep timer is the phone's own clock.
+    @Volatile private var cursorMs = 0L
 
     @Volatile private var lastFullSweepMs = 0L
 
     @Volatile private var loggedMessageIdRewrite = false
+
+    @Volatile private var loggedUntrustedLink = false
+
+    @Volatile private var loggedMissingAuthResults = false
 
     // Message-IDs Outlook stamped in place of ours, by delivery key, so findSent can still find a send
     // from this process after an ambiguous failure. Bounded; lost on process death.
@@ -83,7 +89,7 @@ class GraphGateway(
     override fun clearSession() {
         oauth.clearAccessToken()
         profileEmailAddress = null
-        lastPollMs = 0L
+        cursorMs = 0L
         lastFullSweepMs = 0L
     }
 
@@ -108,10 +114,16 @@ class GraphGateway(
         if (!isAvailable) throw authRequired()
         if (verifyPriorDelivery) findSentFor(deliveryKey)?.let { return it }
         val fromAddress = profileEmail()
-        val built = withContext(Dispatchers.IO) { MimeMessageBuilder.build(payload, attachmentPaths, deliveryKey, fromAddress) }
+        val built =
+            withContext(Dispatchers.IO) {
+                MimeMessageBuilder.build(payload, attachmentPaths, deliveryKey, fromAddress, maxAttachmentBytes = MAX_ATTACHMENT_SOURCE_BYTES)
+            }
         // Graph takes MIME as standard base64 in a text/plain body (the byte form keeps OkHttp from
         // adding a charset parameter to the content type).
         val mime = Base64.getEncoder().encodeToString(built.rawBase64Url.base64UrlDecodeBytes())
+        // Graph refuses bodies over about 4 MB. The budget above keeps attachments well under that;
+        // a huge text body could still exceed it, and that is refused here before anything is sent.
+        if (mime.length > MAX_REQUEST_BODY_CHARS) throw GraphApiException(413, "the message is too large for Outlook to send")
         val draft =
             JSONObject(
                 execute(
@@ -137,11 +149,9 @@ class GraphGateway(
                 retryUnavailable = false,
             )
         } catch (failure: Exception) {
-            // A definite failure means the draft was not sent: remove it so a retry does not leave
-            // another one behind. After an ambiguous one it may have gone out, so it stays.
-            if (failure !is CancellationException && isDefinite(failure)) {
-                safely { execute(Request.Builder().url(url("me", "messages", id)).delete()) }
-            }
+            // A definite failure means the draft was probably not sent: remove it so a retry does not
+            // leave another one behind. After an ambiguous one it may have gone out, so it stays.
+            if (failure !is CancellationException && isDefinite(failure)) safely { deleteIfStillDraft(id) }
             throw failure
         }
         return MailReceipt(
@@ -150,6 +160,19 @@ class GraphGateway(
             rfcMessageId = stamped,
             reconciled = false,
         )
+    }
+
+    /**
+     * Deletes [id] only when Graph still reports it as an unsent draft. With immutable ids a sent
+     * message keeps the draft's id, so a `/send` that went out but answered with an error (for
+     * example a retried call hitting the already-sent item) must not delete the Sent copy: that
+     * would destroy the evidence the router's `findSent` relies on and invite a duplicate.
+     * Any doubt (the check fails, or `isDraft` is missing or false) keeps the item.
+     */
+    private suspend fun deleteIfStillDraft(id: String) {
+        val state = JSONObject(get(url("me", "messages", id) { query("\$select", "isDraft") }))
+        if (state.opt("isDraft") != true) return
+        execute(Request.Builder().url(url("me", "messages", id)).delete())
     }
 
     override suspend fun findSent(deliveryKey: String): MailReceipt? {
@@ -188,18 +211,27 @@ class GraphGateway(
 
     /**
      * Read and unread mail alike (see [MailTransport.pollReplies]): a full 90-day sweep first and
-     * every 6 h, otherwise everything received since 10 minutes before the last successful poll.
+     * every 6 h, otherwise everything received since 10 minutes before the newest message an
+     * earlier poll saw.
+     *
+     * A normal poll that could not read all of its window (the page cap was hit with more pages
+     * pending, the paging link was refused, or too many new candidates) keeps the previous cursor,
+     * so the next poll reads the same window again, and brings the next sweep forward to within
+     * [SWEEP_SOON_MS]. A sweep always moves the cursor: it reads the newest [MAX_POLL_PAGES] pages,
+     * and older mail is out of reach of any poll anyway.
      */
     override suspend fun pollReplies(knownMessageIds: Set<String>): MailPollResult {
         if (!isAvailable) return MailPollResult(emptyList(), emptyList())
         val now = nowMs()
-        val fullSweep = lastPollMs == 0L || now - lastFullSweepMs >= FULL_SWEEP_INTERVAL_MS
-        val since = if (fullSweep) now - SWEEP_WINDOW_MS else lastPollMs - POLL_OVERLAP_MS
+        val previousCursor = cursorMs
+        val fullSweep = previousCursor == 0L || lastFullSweepMs == 0L || now - lastFullSweepMs >= FULL_SWEEP_INTERVAL_MS
+        val since = if (fullSweep) now - SWEEP_WINDOW_MS else previousCursor - POLL_OVERLAP_MS
+        val listing = listInbox("receivedDateTime ge ${iso(since)}")
         val replies = mutableListOf<MailMessage>()
         val failures = mutableListOf<String>()
         var fetched = 0
         var capped = false
-        for (summary in listInbox("receivedDateTime ge ${iso(since)}")) {
+        for (summary in listing.items) {
             val subject = string(summary, "subject").orEmpty()
             if (!subject.contains("SCIF", ignoreCase = true) && !subject.contains("TEXT", ignoreCase = true)) continue
             val id = MailIds.scoped(PROVIDER, string(summary, "id") ?: continue)
@@ -219,18 +251,28 @@ class GraphGateway(
                 failures += "$id: ${(failure.message ?: failure.javaClass.simpleName).take(300)}"
             }
         }
-        lastPollMs = now
-        if (fullSweep) lastFullSweepMs = now
-        // Unseen candidates may remain beyond this poll's cap, so the next poll sweeps again.
-        if (capped) lastFullSweepMs = 0L
+        val incomplete = listing.truncated || capped
+        if (fullSweep || !incomplete) {
+            val newest = listing.items.mapNotNull { receivedMs(it) }.maxOrNull()
+            if (newest != null && newest > previousCursor) cursorMs = newest
+        }
+        if (fullSweep) {
+            lastFullSweepMs = now
+        } else if (incomplete) {
+            // Unseen mail may remain in this window: sweep within SWEEP_SOON_MS instead of 6 h.
+            lastFullSweepMs = minOf(lastFullSweepMs, now - FULL_SWEEP_INTERVAL_MS + SWEEP_SOON_MS)
+        }
         return MailPollResult(replies, failures)
     }
+
+    private fun receivedMs(summary: JSONObject): Long? =
+        string(summary, "receivedDateTime")?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
 
     /** Unread mail from the last 2 days whose subject has a tag and whose sender is listed, newest first. */
     override suspend fun findCommands(search: CommandSearch): CommandScan {
         if (!isAvailable) return CommandScan(emptyList(), emptyList())
         val matches = mutableListOf<String>()
-        for (summary in listInbox("receivedDateTime ge ${iso(nowMs() - COMMAND_WINDOW_MS)} and isRead eq false")) {
+        for (summary in listInbox("receivedDateTime ge ${iso(nowMs() - COMMAND_WINDOW_MS)} and isRead eq false").items) {
             val subject = string(summary, "subject").orEmpty()
             if (search.tags.none { subject.contains(it, ignoreCase = true) }) continue
             val sender = ComposeAuthorization.canonicalAddress(fromAddress(summary)) ?: continue
@@ -262,6 +304,7 @@ class GraphGateway(
         if (!isAvailable) return emptyList()
         val candidates =
             listInbox("receivedDateTime ge ${iso(nowMs() - BOUNCE_WINDOW_MS)} and isRead eq false", BOUNCE_PAGES)
+                .items
                 .filter { summary ->
                     val sender = fromAddress(summary).orEmpty()
                     val subject = string(summary, "subject").orEmpty()
@@ -303,9 +346,15 @@ class GraphGateway(
     /** Called only for an already-authorized message: the plain-text body and the first image. */
     override suspend fun fetchContent(message: MailMessage): MailMessage {
         val id = nativeIdOf(message.id)
-        val json = JSONObject(get(url("me", "messages", id) { query("\$select", "body") }, preferText = true))
-        // Graph converts an HTML-only body to text because of the Prefer header.
-        val body = json.optJSONObject("body")?.let { string(it, "content") }.orEmpty().take(MAX_BODY_CHARACTERS)
+        // Graph converts an HTML-only body to text because of the Prefer header. A body too large to
+        // read is dropped (as Gmail's adapter drops one), and any image is still delivered.
+        val body =
+            try {
+                val json = JSONObject(get(url("me", "messages", id) { query("\$select", "body") }, preferText = true))
+                json.optJSONObject("body")?.let { string(it, "content") }.orEmpty().take(MAX_BODY_CHARACTERS)
+            } catch (_: GraphResponseTooLargeException) {
+                ""
+            }
         val image = fetchImage(id)
         return message.copy(body = body, imageMimeType = image?.first, imageBytes = image?.second)
     }
@@ -323,7 +372,9 @@ class GraphGateway(
             (0 until list.length())
                 .map { list.getJSONObject(it) }
                 .firstOrNull { attachment ->
-                    string(attachment, "@odata.type") == FILE_ATTACHMENT &&
+                    // Only file attachments carry bytes. An entry without a type annotation is judged
+                    // by its content type; the download below is still size-checked.
+                    string(attachment, "@odata.type").let { it == null || it == FILE_ATTACHMENT } &&
                         string(attachment, "contentType").orEmpty().startsWith("image/", ignoreCase = true) &&
                         attachment.optLong("size", Long.MAX_VALUE) in 0..MAX_IMAGE_BYTES
                 } ?: return null
@@ -353,6 +404,10 @@ class GraphGateway(
         val fromHeaders = headers.filter { it.first.equals("From", ignoreCase = true) }.map { it.second }
         // Several From headers are ambiguous: an empty value, which never authenticates.
         val fromHeader = if (fromHeaders.isEmpty()) fromObjectHeader(json) else fromHeaders.singleOrNull().orEmpty()
+        if (fromHeader.isNotEmpty() && headers.none { it.first.equals("Authentication-Results", ignoreCase = true) } && !loggedMissingAuthResults) {
+            loggedMissingAuthResults = true
+            safely { log("Outlook messages arrived without an Authentication-Results header, so senders cannot be authenticated") }
+        }
         return MailMessage(
             id = MailIds.scoped(PROVIDER, id),
             threadId = MailIds.scoped(PROVIDER, string(json, "conversationId") ?: id),
@@ -390,11 +445,17 @@ class GraphGateway(
         }
     }
 
+    private class Listing(
+        val items: List<JSONObject>,
+        /** True when more pages were pending but not read (page cap, or a refused paging link). */
+        val truncated: Boolean,
+    )
+
     /** Inbox summaries, newest first, across at most [maxPages] pages of [PAGE_SIZE]. */
     private suspend fun listInbox(
         filter: String,
         maxPages: Int = MAX_POLL_PAGES,
-    ): List<JSONObject> {
+    ): Listing {
         val items = mutableListOf<JSONObject>()
         var next: HttpUrl? =
             url("me", "mailFolders", "inbox", "messages") {
@@ -409,18 +470,25 @@ class GraphGateway(
             val page = JSONObject(get(next))
             val values = page.optJSONArray("value") ?: JSONArray()
             for (index in 0 until values.length()) values.optJSONObject(index)?.let { items += it }
-            next = string(page, "@odata.nextLink")?.let(::trustedNextLink)
+            val link = string(page, "@odata.nextLink") ?: return Listing(items, truncated = false)
+            next = trustedNextLink(link)
+            if (next == null) {
+                // Keep what was read; the bearer token never follows the link.
+                if (!loggedUntrustedLink) {
+                    loggedUntrustedLink = true
+                    safely { log("Outlook returned a paging link outside graph.microsoft.com; paging stopped") }
+                }
+                return Listing(items, truncated = true)
+            }
         }
-        return items
+        return Listing(items, truncated = next != null)
     }
 
     /** A nextLink is followed only on the Graph endpoint itself, so the bearer token never goes elsewhere. */
-    private fun trustedNextLink(link: String): HttpUrl {
-        val parsed = runCatching { link.toHttpUrl() }.getOrNull()
-        if (parsed == null || parsed.scheme != "https" || parsed.host != GRAPH_HOST || !parsed.encodedPath.startsWith("/v1.0/")) {
-            throw GraphApiException(200, "Graph returned a paging link outside graph.microsoft.com")
-        }
-        return parsed
+    private fun trustedNextLink(link: String): HttpUrl? {
+        val parsed = runCatching { link.toHttpUrl() }.getOrNull() ?: return null
+        val trusted = parsed.scheme == "https" && parsed.host == GRAPH_HOST && parsed.port == 443 && parsed.encodedPath.startsWith("/v1.0/")
+        return parsed.takeIf { trusted }
     }
 
     private fun nativeIdOf(messageId: String): String {
@@ -526,9 +594,7 @@ class GraphGateway(
         withContext(Dispatchers.IO) {
             client.newCall(request).execute().use { response ->
                 val source = response.body?.source()
-                if (source != null && source.request(maxBytes + 1)) {
-                    throw GraphApiException(response.code, "the response was larger than ${maxBytes / 1024} KB")
-                }
+                if (source != null && source.request(maxBytes + 1)) throw GraphResponseTooLargeException(response.code, maxBytes)
                 val body = source?.buffer?.readUtf8().orEmpty()
                 Reply(response.code, body, response.header("Retry-After")?.trim()?.toLongOrNull()?.takeIf { it >= 0 })
             }
@@ -581,6 +647,7 @@ class GraphGateway(
         const val FULL_SWEEP_INTERVAL_MS = 6L * 60 * 60_000L
         const val SWEEP_WINDOW_MS = 90L * 24 * 60 * 60_000L
         const val POLL_OVERLAP_MS = 10L * 60_000L
+        const val SWEEP_SOON_MS = 5L * 60_000L
         const val COMMAND_WINDOW_MS = 2L * 24 * 60 * 60_000L
 
         const val MAX_RETRY_AFTER_SEC = 60L
@@ -589,6 +656,15 @@ class GraphGateway(
 
         // An 8 MB image is about 10.7 MB as base64 inside the attachment's JSON.
         const val MAX_ATTACHMENT_RESPONSE_BYTES = 12L * 1024 * 1024
+
+        // Graph refuses request bodies over about 4 MB; stay under 3.5 MB. The bytes are encoded
+        // twice: MIME base64 (4/3, plus CRLF every 76 chars: x 78/76 = x 1.368), then the request's own
+        // base64 (x 4/3), so x 1.825 in all. The ruling's estimate was 1.8; 1.83 is used to stay
+        // under: floor(3_500_000 / 1.83) = 1_912_568 bytes of attachments in total.
+        const val MAX_ATTACHMENT_SOURCE_BYTES = 1_912_568L
+
+        // Headroom above the 3.5 MB target for headers and a long text body; above this, nothing is sent.
+        const val MAX_REQUEST_BODY_CHARS = 3_800_000
         const val MAX_REMEMBERED_REWRITES = 64
 
         /** UTC ISO-8601 with `Z` and no fractional seconds, the DateTimeOffset literal OData filters take. */

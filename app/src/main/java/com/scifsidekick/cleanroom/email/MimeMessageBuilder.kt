@@ -33,11 +33,14 @@ object MimeMessageBuilder {
         attachmentPaths: List<String>,
         deliveryKey: String,
         fromAddress: String,
+        // Total attachment bytes this provider can carry; over it, every attachment is left out and
+        // the body says so. The default is Gmail's budget, so Gmail's output is unchanged.
+        maxAttachmentBytes: Long = MAX_SOURCE_ATTACHMENT_BYTES,
     ): BuiltMime {
         val files = attachmentPaths.map(::File).filter { it.isFile }
         val missingAttachmentCount = attachmentPaths.size - files.size
         val totalBytes = files.sumOf { it.length() }
-        val attach = totalBytes <= MAX_SOURCE_ATTACHMENT_BYTES
+        val attach = totalBytes <= maxAttachmentBytes
         val omittedBytes = if (attach) 0 else totalBytes
         val boundary = "sidekick_${UUID.randomUUID()}"
         val text = buildBody(payload, omittedBytes, missingAttachmentCount)

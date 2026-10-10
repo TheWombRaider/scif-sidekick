@@ -11,3 +11,9 @@ class GraphApiException(
     statusCode: Int,
     detail: String,
 ) : MailHttpException(statusCode, "Graph API HTTP $statusCode: $detail")
+
+/** Graph's response was larger than the gateway reads for that call; nothing of it was used. */
+class GraphResponseTooLargeException(
+    statusCode: Int,
+    limitBytes: Long,
+) : MailHttpException(statusCode, "Graph API response over ${limitBytes / 1024} KB (HTTP $statusCode)")
