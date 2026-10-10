@@ -82,6 +82,7 @@ class MailRouter(
             }
         }
         var firstFailure: Throwable? = null
+        var firstNonAuthFailure: Throwable? = null
         for ((index, member) in usable.withIndex()) {
             val hasNext = index < usable.lastIndex
             val receipt =
@@ -91,6 +92,7 @@ class MailRouter(
                     throw cancelled
                 } catch (failure: Exception) {
                     if (firstFailure == null) firstFailure = failure
+                    if (firstNonAuthFailure == null && failure !is MailAuthRequiredException) firstNonAuthFailure = failure
                     when (classify(failure)) {
                         Kind.AUTH -> absorbedAuth += failure as MailAuthRequiredException
                         Kind.DEFINITE -> Unit
@@ -123,7 +125,8 @@ class MailRouter(
             }
         }
         // Safe: usable is non-empty and every path that neither returned nor threw recorded a failure.
-        val failure = firstFailure!!
+        // Prefer a non-auth failure: an auth pause does not count an attempt, so the retry would skip the Sent check.
+        val failure = firstNonAuthFailure ?: firstFailure!!
         reportAbsorbed(absorbedAuth, rethrown = failure)
         throw failure
     }

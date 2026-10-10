@@ -69,6 +69,11 @@ class MailMembersTest {
         assertFalse(afterOutlookSignIn(current = false, remoteOwnerSeeded = true, gmailAuthorized = false))
     }
 
+    @Test fun `a Gmail granted once counts as connected even without a seeded address`() {
+        assertTrue(gmailEverConnected(remoteOwnerSeeded = false, gmailAuthorized = false, gmailEverGranted = true))
+        assertFalse(gmailEverConnected(remoteOwnerSeeded = false, gmailAuthorized = false, gmailEverGranted = false))
+    }
+
     @Test fun `a connected Gmail is not marked`() {
         assertTrue(gmailEverConnected(remoteOwnerSeeded = false, gmailAuthorized = true))
         assertFalse(afterOutlookSignIn(current = false, remoteOwnerSeeded = true, gmailAuthorized = true))

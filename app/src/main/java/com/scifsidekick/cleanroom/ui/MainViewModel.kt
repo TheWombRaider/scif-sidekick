@@ -416,7 +416,7 @@ class MainViewModel(
                             graph.msPrefs.accountEmail = email
                             // Outlook-only install (Gmail never connected): no Gmail to remind the user about.
                             // An expired Gmail stays a member so it is still alerted. Connecting Gmail clears this.
-                            val everConnected = gmailEverConnected(graph.repository.remoteOwnerSeeded(), graph.gmail.isAvailable)
+                            val everConnected = gmailEverConnected(graph.repository.remoteOwnerSeeded(), graph.gmail.isAvailable, graph.oauth.everGranted)
                             graph.gmailDisconnectedOnPurpose =
                                 gmailDisconnectedAfterOutlookSignIn(graph.gmailDisconnectedOnPurpose, everConnected)
                         }

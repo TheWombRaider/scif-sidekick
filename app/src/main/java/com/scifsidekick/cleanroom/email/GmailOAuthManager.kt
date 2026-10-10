@@ -32,6 +32,9 @@ class GmailOAuthManager(
     @Volatile private var lastAccount: Account? = null
     val isAuthorized: Boolean get() = prefs.getBoolean(KEY_GRANTED, false)
 
+    /** True once Gmail was ever granted on this install; nothing clears the key, so an expired grant still counts. */
+    val everGranted: Boolean get() = prefs.contains(KEY_GRANTED)
+
     data class ConsentStep(
         val pendingIntent: PendingIntent?,
     )

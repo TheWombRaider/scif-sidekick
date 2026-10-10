@@ -58,12 +58,14 @@ fun gmailDisconnectedAfterOutlookSignIn(
 
 /**
  * Whether Gmail has ever been connected on this install: its owner address was seeded (the
- * one-time setup flag set the first time Gmail connects) or it is authorized now.
+ * one-time setup flag set the first time Gmail connects), it is authorized now, or a grant was
+ * ever recorded (covers a Gmail whose address was never readable).
  */
 fun gmailEverConnected(
     remoteOwnerSeeded: Boolean,
     gmailAuthorized: Boolean,
-): Boolean = remoteOwnerSeeded || gmailAuthorized
+    gmailEverGranted: Boolean = false,
+): Boolean = remoteOwnerSeeded || gmailAuthorized || gmailEverGranted
 
 private const val GMAIL = "gmail"
 private const val GRAPH = "graph"

@@ -452,6 +452,24 @@ class MailRouterTest {
             assertEquals(emptyList<String>(), duplicates)
         }
 
+    @Test fun `an auth failure ahead of an ambiguous one rethrows the ambiguous one and alerts once`() =
+        runBlocking {
+            gmail.failNextSendWith = MailAuthRequiredException("reconnect", "gmail", "Gmail")
+            val timeout = SocketTimeoutException("timeout")
+            graph.failNextSendWith = timeout
+            assertSame(timeout, thrownBy<SocketTimeoutException> { runBlocking { router(gmail, graph).send("k1") } })
+            assertEquals(listOf("gmail"), authRequired.map { it.providerId })
+        }
+
+    @Test fun `an auth failure ahead of a definite one rethrows the definite one`() =
+        runBlocking {
+            gmail.failNextSendWith = MailAuthRequiredException("reconnect", "gmail", "Gmail")
+            val bad = MailHttpException(400, "bad request")
+            graph.failNextSendWith = bad
+            assertSame(bad, thrownBy<MailHttpException> { runBlocking { router(gmail, graph).send("k1") } })
+            assertEquals(listOf("gmail"), authRequired.map { it.providerId })
+        }
+
     @Test fun `a lone signed-out member answers send itself`() =
         runBlocking {
             gmail.signedIn = false
