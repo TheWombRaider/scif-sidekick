@@ -121,6 +121,8 @@ class MainActivity : FragmentActivity() {
         super.onResume()
         refreshNotificationAccess()
         refreshBatteryStatus()
+        // An Outlook sign-in can be revoked or expire while the app is in the background.
+        viewModel.refreshMicrosoftState()
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -181,6 +183,9 @@ class MainActivity : FragmentActivity() {
         var oauthAuthorized by rememberSaveable { mutableStateOf(vm.oauthAuthorized) }
         var pubSubGranted by remember { mutableStateOf(vm.pubSubGranted) }
         var gmailAccountEmail by rememberSaveable { mutableStateOf<String?>(null) }
+        val microsoftState by vm.microsoftState.collectAsStateWithLifecycle()
+        var microsoftClientId by remember { mutableStateOf(vm.microsoftClientId) }
+        var preferredProvider by remember { mutableStateOf(vm.preferredProvider) }
         var currentScreenName by rememberSaveable { mutableStateOf(AppScreen.HOME.name) }
         var appMenuExpanded by remember { mutableStateOf(false) }
         var editingFilterId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -390,6 +395,11 @@ class MainActivity : FragmentActivity() {
                         }
 
                         AppScreen.SETTINGS -> {
+                            LaunchedEffect(Unit) {
+                                vm.refreshMicrosoftState()
+                                microsoftClientId = vm.microsoftClientId
+                                preferredProvider = vm.preferredProvider
+                            }
                             val scrollState = rememberScrollState()
                             scrollState.reportScrollActivity()
                             Box(Modifier.fillMaxSize().padding(padding)) {
@@ -402,6 +412,7 @@ class MainActivity : FragmentActivity() {
                                 ) {
                                     Spacer(Modifier.height(2.dp))
                                     SectionHeader("Account & connectivity")
+                                    Text("Email accounts", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                                     GmailCard(
                                         oauthAuthorized = oauthAuthorized,
                                         accountEmail = gmailAccountEmail,
@@ -427,6 +438,24 @@ class MainActivity : FragmentActivity() {
                                             pubSubGranted = false
                                             gmailAccountEmail = null
                                         },
+                                    )
+                                    MicrosoftAccountCard(
+                                        state = microsoftState,
+                                        clientId = microsoftClientId,
+                                        preferred = preferredProvider,
+                                        gmailConnected = oauthAuthorized,
+                                        onClientIdChange = { id ->
+                                            vm.setMicrosoftClientId(id)
+                                            microsoftClientId = id
+                                        },
+                                        onConnect = vm::startMicrosoftSignIn,
+                                        onCancel = vm::cancelMicrosoftSignIn,
+                                        onDisconnect = vm::disconnectMicrosoft,
+                                        onPreferredChange = { provider ->
+                                            vm.setPreferredProvider(provider)
+                                            preferredProvider = provider
+                                        },
+                                        onMessage = { vm.messages.tryEmit(it) },
                                     )
                                     NotificationCoverageCard(
                                         accessGranted = notificationAccessGranted,

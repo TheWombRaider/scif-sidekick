@@ -35,8 +35,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.scifsidekick.cleanroom.data.EventLogEntity
 import com.scifsidekick.cleanroom.data.ForwardingFilterEntity
 import com.scifsidekick.cleanroom.data.ForwardingStateEntity
@@ -64,6 +66,7 @@ internal fun HomeScreen(
 ) {
     val listState = rememberLazyListState()
     listState.reportScrollActivity()
+    val microsoftState by vm.microsoftState.collectAsStateWithLifecycle()
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
@@ -101,6 +104,8 @@ internal fun HomeScreen(
             ConnectionHealthRow(
                 gmailConnected = gmailConnected,
                 onGmailClick = { onNavigate(AppScreen.SETTINGS) },
+                outlook = OutlookChipState.of(microsoftState),
+                onOutlookClick = { onNavigate(AppScreen.SETTINGS) },
                 rcsGranted = notificationAccessGranted,
                 onRcsClick = onOpenNotificationAccess,
                 batteryUnrestricted = batteryUnrestricted,
@@ -301,6 +306,8 @@ private fun SetupChecklistCard(
 private fun ConnectionHealthRow(
     gmailConnected: Boolean,
     onGmailClick: () -> Unit,
+    outlook: OutlookChipState,
+    onOutlookClick: () -> Unit,
     rcsGranted: Boolean,
     onRcsClick: () -> Unit,
     batteryUnrestricted: Boolean,
@@ -308,8 +315,37 @@ private fun ConnectionHealthRow(
 ) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         HealthChip("Gmail", gmailConnected, onGmailClick, Modifier.weight(1f))
+        // Only once an Outlook account exists: Gmail-only setups keep their three chips.
+        if (outlook != OutlookChipState.HIDDEN) {
+            FilterChip(
+                selected = outlook == OutlookChipState.OK,
+                onClick = onOutlookClick,
+                label = { Text(if (outlook == OutlookChipState.OK) "Outlook ✓" else "Outlook ⚠", maxLines = 1) },
+                modifier =
+                    Modifier.weight(1f).semantics {
+                        contentDescription = if (outlook == OutlookChipState.OK) "Outlook connected" else "Outlook needs reconnecting"
+                    },
+            )
+        }
         HealthChip("RCS", rcsGranted, onRcsClick, Modifier.weight(1f))
         HealthChip("Battery", batteryUnrestricted, onBatteryClick, Modifier.weight(1f))
+    }
+}
+
+/** The Home screen's Outlook chip: absent, healthy, or needing a reconnect. */
+private enum class OutlookChipState {
+    HIDDEN,
+    OK,
+    NEEDS_RECONNECT,
+    ;
+
+    companion object {
+        fun of(state: MicrosoftUiState): OutlookChipState =
+            when (state) {
+                is MicrosoftUiState.Connected -> OK
+                is MicrosoftUiState.NeedsReconnect -> NEEDS_RECONNECT
+                else -> HIDDEN
+            }
     }
 }
 

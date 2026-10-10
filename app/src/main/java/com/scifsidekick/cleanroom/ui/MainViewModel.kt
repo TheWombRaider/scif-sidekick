@@ -328,6 +328,9 @@ class MainViewModel(
 
     val preferredProvider: String get() = graph.msPrefs.preferredProvider
 
+    /** The stored Application (client) ID, "" when unset. */
+    val microsoftClientId: String get() = graph.msPrefs.clientId
+
     init {
         refreshMicrosoftState()
     }
@@ -525,7 +528,12 @@ class MainViewModel(
                 when (val outcome = suspendRunCatching { withContext(Dispatchers.IO) { SelfTestReceipt.send(getApplication(), graph) } }.getOrNull()) {
                     is SelfTestReceipt.Outcome.Queued ->
                         "Test receipt queued to ${outcome.recipient} via ${outcome.via}. It should arrive within a minute or two."
-                    SelfTestReceipt.Outcome.NotConnected -> "Connect Gmail before sending a test receipt"
+                    SelfTestReceipt.Outcome.NotConnected ->
+                        if (withContext(Dispatchers.IO) { graph.microsoftConfigured() }) {
+                            "Connect a mail account before sending a test receipt"
+                        } else {
+                            "Connect Gmail before sending a test receipt"
+                        }
                     SelfTestReceipt.Outcome.NotQueued -> "Test receipt was not queued (storage limit reached). See Activity."
                     null -> "Test receipt could not be queued. See Activity."
                 }
