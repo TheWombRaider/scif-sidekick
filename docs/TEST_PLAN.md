@@ -146,3 +146,57 @@ Set *Settings → Display → Font size and style* to the largest size and *Disp
 ## 17. Commands screen and test receipt (manual)
 
 Open the menu and choose *Commands*. Check that each subject shown matches what the README table says, and that the line under the heading reflects whether remote control is on and how many addresses are authorized. Then open *Settings → Remote control by email* and tap *Send test receipt* with Gmail connected: a snackbar should confirm it was queued, and an email titled "SCIF Sidekick: self-test receipt" should reach the connected account within a minute or two. With Gmail disconnected the button should say to connect Gmail and queue nothing.
+
+## 18. Microsoft account (manual)
+
+Everything Outlook-specific was built and tested against `FakeGraphServer`, a simulation of the Microsoft Graph subset the app uses. Nothing below has run against a real Microsoft account yet. Use an Outlook.com account and a Gmail account you control, both connected, plus a second phone. Record each result and the date here; anything that fails is a bug to report, and a failed sender check is expected to reject mail (fail closed), never to accept it.
+
+**Sign-in and sending**
+
+1. Register the app in Entra exactly as the README's Outlook Setup describes (personal accounts included, no redirect URI, public client flows on, the four delegated permissions). Copy the Application (client) ID.
+2. In Settings → Email accounts → Microsoft (Outlook.com), paste the ID and tap **Connect Microsoft account**. Enter the code at the page shown, on another device. Confirm the card shows CONNECTED with the right address, Home shows **Outlook ✓**, Activity shows "Outlook connected", and the address appears in Settings → Remote control by email with all four commands checked.
+3. Set **Send first** to Microsoft. Send an SMS from the second phone and confirm the forward arrives from the Outlook address, with the `[SCIF:+number]` tag. Confirm Activity has **no** "Outlook replaced the Message-ID of a sent message" event. If it does, record it: reply routing still works in that process, but a duplicate is possible after a restart (assumption 2 below).
+4. Reply to that forward from the recipient's mailbox and confirm the reply becomes one SMS to the second phone. This needs Outlook's sender authentication to accept a real header; if it is rejected, Activity shows a SECURITY entry and step 9 tells you what to record.
+
+**Commands across the two inboxes**
+
+5. From the Gmail address, email the Outlook address with subject `[SCIF:STATUS]`. Confirm the status reply arrives and lists both `Gmail authorization` and `Outlook authorization`.
+6. From the Outlook address, email the Gmail address with subject `[SCIF:STATUS]`. Confirm the reply arrives.
+7. From the Outlook address, email the Outlook address itself with `[SCIF:STATUS]`. Confirm no reply and a SECURITY "could not be authenticated" entry in Activity (self-sent mail on the same account is rejected, as on Gmail, §13).
+8. From a *different* outlook.com (or hotmail.com) address that is on the remote control list with only Status checked, send `[SCIF:STATUS]` to the Outlook inbox with a forged header `Authentication-Results: spf=pass; dkim=pass; dmarc=pass action=none header.from=<that sender's domain>` added by the sending client or tool, if it lets you. Mail between two Microsoft mailboxes may not get a fresh top header from Exchange, so check whether the forged header ends up first in the received message's headers. Record the result. If a forged header is ever honored, treat it as a security bug.
+9. Open one received message in Outlook on the web (… → View → View message source, or the equivalent) and copy its `Authentication-Results` header(s) here, in order, with addresses and domains redacted. Confirm Exchange's own header comes first and has the form `spf=...; dkim=...; dmarc=pass action=none header.from=<domain>; compauth=pass reason=...`. Note whether it mentions "dmarc" more than once (the app rejects that).
+   - **Result:** not yet recorded.
+
+**Failover**
+
+10. With both accounts connected and Send first set to Microsoft, sign the Outlook account out remotely (Microsoft account → apps with access → remove the app), force-stop SCIF Sidekick and reopen it (an access token already in memory can stay valid for up to about an hour), turn forwarding on and send an SMS from the second phone. Confirm the forward arrives from Gmail, a **Reconnect Outlook** alert appears, and the Gmail reconnect alert does not. Repeat with Send first set to Gmail and Gmail disconnected, and confirm Outlook carries the forward.
+11. Reconnect Outlook from the card (**Connect Microsoft account**). Confirm the Reconnect Outlook alert clears and Home shows **Outlook ✓** again.
+12. Tap **Disconnect** on the Microsoft card. Confirm the card returns to the setup state, the Outlook chip disappears, Gmail and the forwarding switch are untouched, and forwards go out through Gmail.
+
+**Attachments**
+
+13. With Send first set to Microsoft, send a picture message larger than 2 MB to the phone. Confirm the forward arrives from Outlook without the image and its body says "Attachment not forwarded: ... exceeds the safe Outlook message-size budget." Repeat with a picture under about 1.5 MB and confirm it is attached.
+
+**Graph assumptions to confirm** (from the GraphGateway work; each was implemented to fail in the safe direction where it could):
+
+14. `POST /me/messages` with `Content-Type: text/plain` and a standard-base64 MIME body creates a draft and returns `id`, `conversationId` and `internetMessageId`.
+15. Exchange keeps the app's own `Message-ID` on a MIME draft (step 3). If it does not, the receipt uses Exchange's, a one-time "Outlook replaced the Message-ID" event is logged, and `findSent` after a process restart cannot find that send, so a router retry could duplicate it.
+16. `POST /me/messages/{id}/send` returns 202 with an empty body, and with `Prefer: IdType="ImmutableId"` the Sent Items copy keeps the draft's id.
+17. The Sent Items copy appears soon enough for `findSent` after an ambiguous failure (Microsoft notes it might not appear immediately).
+18. `$filter=internetMessageId eq '<...>'` on `mailFolders/sentitems/messages` is accepted and matches the bracketed value.
+19. `$filter=receivedDateTime ge <time> and isRead eq false` with `$orderby=receivedDateTime desc&$top=50` is accepted (not "InefficientFilter"), and `@odata.nextLink` pages it.
+20. `$select=internetMessageHeaders,...` on a single message returns the full header list in wire order, with Exchange's own `Authentication-Results` first (step 9).
+21. On a personal Outlook.com account, `GET /me?$select=mail,userPrincipalName` gives a usable address (`mail` may be null; the user principal name is used then).
+22. Two `Prefer` headers on one request (`IdType="ImmutableId"` and `outlook.body-content-type="text"`) are both honored, and the text form converts an HTML-only body (reply with an HTML-only client in step 4).
+23. `GET .../attachments?$select=id,name,contentType,size` still returns `@odata.type` per item, and `GET .../attachments/{id}` returns `contentBytes` as standard base64 (reply to a forward with a photo attached and confirm it goes out as an MMS).
+24. 429 and 503 responses carry `Retry-After` in seconds.
+25. Exchange's bounce (NDR) format: the sender is `postmaster@...` or the subject contains "Undeliverable", and the app's Message-ID appears in the NDR's text body or headers. Forward to a nonexistent address and confirm the bounce is flagged. An NDR that carries the Message-ID only inside the attached original is missed (best effort, as for Gmail).
+26. Graph REST ids are safe as URL path segments after OkHttp's encoding.
+27. `GET /me/messages/{id}?$select=isDraft` reports `isDraft: true` for an unsent draft (the app deletes a draft after a definite send failure only then).
+28. Graph refuses request bodies over about 4 MB, so the app's 3.5 MB target (1,912,568 bytes of attachments) is safe (step 13).
+
+**Known residuals** (accepted, recorded so they are not rediscovered):
+
+- `/send` is asynchronous on Microsoft's side. If its response is lost and the router's follow-up check runs very early, the item may still read `isDraft == true` or be missing from Sent Items, so a fallback send could duplicate the forward. The event log says "possible duplicate" when this path is taken.
+- Gmail's ARC exemption (DESIGN_NOTES, "Only the first `Authentication-Results` header counts") assumes Gmail never echoes `)` or `;` from a sender-controlled domain into the ARC comment's domain fields. It matters only for `From` domains without DMARC.
+- A draft left by an ambiguous send that never went out stays in the Outlook Drafts folder; it is never sent.

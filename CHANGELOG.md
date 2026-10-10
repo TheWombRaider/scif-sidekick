@@ -2,6 +2,14 @@
 
 Short version. The full notes, with the reasoning behind each change, are in [docs/CHANGELOG_DETAILED.md](docs/CHANGELOG_DETAILED.md).
 
+## 1.29.0
+- New optional **Outlook.com account** under Settings → Email accounts → Microsoft. You register a free app with Microsoft once, paste its ID, and sign in with a short code on any device. See Outlook Setup in the README.
+- **Failover:** with Gmail and Outlook both connected, a forward the first account can't send goes out through the other. Both inboxes are checked for replies and commands. **Send first** picks the account tried first.
+- Separate **Reconnect Gmail** and **Reconnect Outlook** alerts, an **Outlook** chip on Home, and an `Outlook authorization` line in status replies.
+- The Outlook address is added to the remote control list the first time it connects, so commands mailed from one of your accounts to the other work.
+- Stricter sender checks on email commands and replies, for Gmail as well as Outlook.
+- Outlook forwards carry up to about 1.9 MB of attachments; Gmail's limit is unchanged.
+
 ## 1.28.1
 - Raised the text caps so a busy day with several correspondents doesn't hit them: 100 an hour (was 60) and 1,000 a day (was 200). Still 10 a minute. The email caps are unchanged.
 

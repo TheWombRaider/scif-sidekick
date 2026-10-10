@@ -45,6 +45,17 @@ object Changelog {
     val entries =
         listOf(
             ChangelogEntry(
+                "1.29.0",
+                listOf(
+                    "Optional Outlook.com account (Settings → Email accounts → Microsoft), signed in with a short code on any device.",
+                    "With Gmail and Outlook both connected, if one can't send the other takes over, and both inboxes are checked for replies and commands.",
+                    "\"Send first\" chooses which account is tried first.",
+                    "Separate Reconnect Gmail and Reconnect Outlook alerts; status replies add an Outlook line.",
+                    "Stricter sender checks on remote commands for both providers.",
+                ),
+                date = "2026-10-10",
+            ),
+            ChangelogEntry(
                 "1.28.1",
                 listOf(
                     "Text caps raised to 100 an hour and 1,000 a day (were 60 and 200); still 10 a minute.",

@@ -29,8 +29,8 @@ android {
         applicationId = "com.scifsidekick.cleanroom"
         minSdk = 26
         targetSdk = 37
-        versionCode = 59
-        versionName = "1.28.1"
+        versionCode = 60
+        versionName = "1.29.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

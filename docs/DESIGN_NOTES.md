@@ -9,7 +9,7 @@ SCIF Sidekick is a clean-room Android/Kotlin rebuild that relays live SMS events
 
 Installing it cannot reuse state from an earlier SCIF Sidekick build.
 
-This build is release **1.24.0**. Release history, including the reasoning behind each change, lives in [CHANGELOG.md](../CHANGELOG.md).
+This build is release **1.29.0**. Release history, including the reasoning behind each change, lives in [CHANGELOG.md](../CHANGELOG.md).
 
 See [Filters](#filters) and [Remote control by email](#remote-control-by-email) below. See [docs/QA_AUDIT.md](QA_AUDIT.md) for the 1.1.0 audit and [docs/TEST_PLAN.md](TEST_PLAN.md) for device checks.
 
@@ -82,7 +82,7 @@ Upgrading from 1.3.0 or earlier seeds exactly one filter from whatever the old g
 - Android Studio with JDK 17
 - Android SDK 37 / Android Studio with Android 17 support
 - A physical SMS-capable Android phone (minimum API 26)
-- A Google Cloud project and the Gmail API
+- A Google Cloud project and the Gmail API, a Microsoft Entra app registration for an Outlook.com account, or both (see the README's Gmail Setup and Outlook Setup)
 
 ## Google Cloud / Gmail setup
 
@@ -197,11 +197,29 @@ An image attached to an authorized trigger email goes out as an MMS instead of a
 
 **This is disclosed as unverified against real carrier/MMSC infrastructure.** It has been built, compiled, and exercised with fake/local inputs, but actual MMS delivery depends on carrier-specific configuration this project has no way to test without a physical device on a live SIM. Images are downscaled to a conservative size budget before sending to reduce the odds of a carrier rejecting an oversized message, but that budget is an informed guess, not a number measured against any specific carrier.
 
+## Outlook and mail failover
+
+Release 1.29.0 adds Microsoft Graph (Outlook.com) as a second mail provider behind `MailTransport`, and a `MailRouter` that keeps the app working when one mailbox is down. The design is in `docs/superpowers/specs/2026-10-09-microsoft-graph-and-failover-design.md`; `docs/ARCHITECTURE.md` describes the pieces. The decisions that need their reasons written down:
+
+**Failover prefers a rare duplicate to a lost forward.** A send that fails is not always a send that did not happen. The router sorts failures into three kinds. An authorization failure, or a *definite* failure (the provider answered with an error other than 5xx, or the connection never opened), means the message did not go out, so the next account sends it. An *ambiguous* failure (a timeout, a reset or a 5xx after the request may have reached the provider) might have delivered it, so the router first asks that account's Sent folder (`findSent`, by the deterministic Message-ID). Found: the send is recorded as done. Not found, or the check itself fails: the next account sends anyway and the event log says "possible duplicate". The alternative, waiting until the ambiguous account answers, is exactly the silent phone this app exists to prevent. A retry after a crash (`verifyPriorDelivery`) asks every account's Sent folder first, so a forward the fallback already carried is never repeated by the preferred account coming back. With one account there is nothing to fail over to, and the router hands the call to it unchanged.
+
+**Only the first `Authentication-Results` header counts.** The receiving provider prepends its own verdict above anything already in the message; a header lower down may have been written by the sender. So each provider reads only the topmost header, never merges it with later ones, and requires exactly one dmarc clause whose result is exactly `pass` and whose own `header.from=` equals the `From` domain, with no subdomain relaxation. Comments and quoted strings are stripped before parsing, because the first draft of the parser accepted `reason="x; dmarc=pass header.from=..."` as if the quoted text were a clause. Stripping creates its own risk: a forged, unclosed `(` could swallow the provider's real `dmarc=fail`. That is why the raw header text must mention "dmarc" exactly once before anything is stripped; a second mention, even an innocent one inside a comment, fails closed. Gmail has one exception: it reports an ARC chain's own results, including `dmarc=pass`, in a plain comment on the `arc=` clause, so mentions inside a comment directly on an `arc=` clause, with no nesting, quotes or escapes, are not counted. Such a comment is always removed whole by the stripper, so it can never form or hide a clause. Asserted domains must be ASCII before lowercasing (the Kelvin sign U+212A folds to `k`), and `ComposeAuthorization.canonicalAddress` now rejects non-ASCII addresses for the same reason. The Gmail check was hardened to these rules in the same release; its trust model (topmost header, authserv-id `mx.google.com`) is unchanged.
+
+Microsoft's header layout is modeled on Exchange Online's documented form and has been tested only against a simulated service. Until `docs/TEST_PLAN.md` §18 confirms it on real mail, an Outlook sender that cannot be authenticated is rejected, which is the safe direction.
+
+**The stored refresh token.** Gmail stores nothing: Google Play services holds its own grant. Microsoft's device code flow has no such broker, so the app keeps one refresh token, encrypted with AES-256-GCM under a non-exportable Android Keystore key, in app-private storage, with Android backups off and the token kept out of the settings export. The threat model: another app cannot read it (app sandbox), a copied data directory or a backup cannot use it (the key never leaves the Keystore), and a lost token is revoked by disconnecting the app from the Microsoft account. What it does not stop is code running as this app on a rooted or compromised phone, which can ask the Keystore to decrypt the token; that is the same exposure as the Google grant already on the phone. Disconnect deletes the token and the key. A failed decryption is treated as "no token" and asks for a new sign-in rather than guessing.
+
+**Why device code instead of MSAL or a redirect.** MSAL would add several libraries (and the dependency-verification entries for all of them) and a redirect URI tied to the APK's signing certificate, so every rebuild with another key would need the registration updated, the same trap Gmail's Android OAuth client already sets. The device code flow needs only two HTTPS endpoints the app can call with the OkHttp it already has, works with no redirect at all, and suits a phone that lives in a locker: the code can be entered on any device. The Outlook client ID is the owner's own Entra registration and is public, not a secret.
+
+**Polling, not push.** Graph change notifications need a public HTTPS endpoint, which a single-user phone app does not have, so Outlook is polled on the same 30-second tick as Gmail: about one small request per tick while forwarding is on.
+
+**Attachments.** Graph refuses requests over about 4 MB, and a MIME draft is base64 twice (once inside the MIME, once for the request body), about 1.83 times the source size. Outlook forwards therefore carry at most 1,912,568 bytes of attachments in total; over that, all attachments are left out with the same "Attachment not forwarded" disclosure Gmail uses, naming Outlook. Gmail's 18 MB budget is unchanged.
+
 ## App lock and backup
 
 **App lock** (Settings) gates the app behind your device's screen lock or biometric the next time it's opened from a cold start; it does not re-prompt on every rotation or on an OS-restored recent task, which is a disclosed trade-off, not a gap in disguise. If the device has no screen lock or biometric enrolled, the lock is skipped rather than locking you out of your own app.
 
-**Backup & restore** (hamburger menu) exports every filter and app setting — never a Gmail token, since none is stored in this app — to a JSON file you choose on-device, and can restore from one, replacing whatever filters currently exist.
+**Backup & restore** (hamburger menu) exports every filter and app setting to a JSON file you choose on-device, and can restore from one, replacing whatever filters currently exist. The file never holds a token: none is stored for Gmail, and the Outlook refresh token and Microsoft account settings are not included.
 
 ## Debug safety tests
 
