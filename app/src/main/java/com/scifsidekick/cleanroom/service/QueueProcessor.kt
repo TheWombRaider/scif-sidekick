@@ -40,6 +40,10 @@ class QueueProcessor(
     private val mms: MmsGateway,
     private val attachments: AttachmentStore,
     private val alerts: AlertNotifier,
+    /** Raises the reconnect alert for a paused send. The app routes it through [AuthAlertCoordinator]. */
+    private val onAuthRequired: suspend (MailAuthRequiredException) -> Unit = {
+        alerts.showAuthorizationRequired(it.providerId, it.displayName)
+    },
 ) {
     private data class ClaimedDelivery(
         val item: SendQueueEntity,
@@ -627,7 +631,7 @@ class QueueProcessor(
                 ),
             )
         }
-        alerts.showAuthorizationRequired(failure.providerId, failure.displayName)
+        onAuthRequired(failure)
     }
 
     private suspend fun recordPermanentFailure(

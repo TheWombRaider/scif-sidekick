@@ -267,6 +267,17 @@ class MailRouterTest {
             assertNull(r.accountEmail())
         }
 
+    @Test fun `the primary display name is the first available member's`() {
+        assertEquals("Gmail", router(gmail, graph).primaryDisplayName())
+        assertEquals("Outlook", router(graph, gmail).primaryDisplayName())
+        gmail.signedIn = false
+        assertEquals("Outlook", router(gmail, graph).primaryDisplayName())
+        graph.signedIn = false
+        assertEquals("Gmail", router(gmail, graph).primaryDisplayName())
+        assertEquals("Gmail", router(gmail).primaryDisplayName())
+        assertEquals(MailRouter.ROUTER_NAME, router().primaryDisplayName())
+    }
+
     // 15
     @Test fun `a successful send through the fallback reports it recovered`() =
         runBlocking {

@@ -507,6 +507,36 @@ class MsOAuthManagerTest {
             assertEquals(1, seen.size)
         }
 
+    @Test fun `a failed rotation write leaves a secret-free breadcrumb, a successful one none`() =
+        runBlocking {
+            val logged = mutableListOf<String>()
+            val store = InMemoryRefreshTokenStore(REFRESH_1)
+            store.failWrites = true
+            val mgr =
+                MsOAuthManager(
+                    clientId = { CLIENT_ID },
+                    store = store,
+                    client = scripted(200 to tokens(access = ACCESS_1, refresh = REFRESH_2)),
+                    nowMs = { now },
+                    delayMs = { delays += it },
+                    log = { logged += it },
+                )
+            assertEquals(ACCESS_1, mgr.freshAccessToken())
+            assertEquals(1, logged.size)
+            listOf(REFRESH_1, REFRESH_2, ACCESS_1, CLIENT_ID).forEach { secret -> assertFalse(logged.single().contains(secret)) }
+
+            val quiet = mutableListOf<String>()
+            MsOAuthManager(
+                clientId = { CLIENT_ID },
+                store = InMemoryRefreshTokenStore(REFRESH_1),
+                client = scripted(200 to tokens(access = ACCESS_1, refresh = REFRESH_2)),
+                nowMs = { now },
+                delayMs = { delays += it },
+                log = { quiet += it },
+            ).freshAccessToken()
+            assertEquals(emptyList<String>(), quiet)
+        }
+
     @Test fun `token lifetime is clamped so a huge expires_in cannot disable refresh`() =
         runBlocking {
             val mgr =

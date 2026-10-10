@@ -9,13 +9,19 @@ import com.scifsidekick.cleanroom.email.GmailOAuthManager
 import com.scifsidekick.cleanroom.email.GmailPushGateway
 import com.scifsidekick.cleanroom.email.MailRouter
 import com.scifsidekick.cleanroom.email.MailTransport
+import com.scifsidekick.cleanroom.email.graph.GraphGateway
+import com.scifsidekick.cleanroom.email.graph.KeystoreRefreshTokenStore
+import com.scifsidekick.cleanroom.email.graph.MsAccountPreferences
+import com.scifsidekick.cleanroom.email.graph.MsOAuthManager
 import com.scifsidekick.cleanroom.messaging.MmsGateway
 import com.scifsidekick.cleanroom.messaging.SmsGateway
 import com.scifsidekick.cleanroom.service.AlertNotifier
+import com.scifsidekick.cleanroom.service.AuthAlertCoordinator
 import com.scifsidekick.cleanroom.service.QueueProcessor
 import com.scifsidekick.cleanroom.service.RollingRateLimiter
 import com.scifsidekick.cleanroom.util.AttachmentStore
-import java.util.concurrent.ConcurrentHashMap
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 
 class AppGraph private constructor(
     context: Context,
@@ -28,19 +34,53 @@ class AppGraph private constructor(
     val gmail = GmailGateway(oauth, debug)
     val alerts = AlertNotifier(app)
 
-    // Providers whose reconnect alert the router itself raised. A later success clears that alert
-    // once, instead of posting a cancel to the notification service after every successful poll.
-    private val routerAlertedProviders = ConcurrentHashMap.newKeySet<String>()
+    // Shared by Microsoft sign-in and Graph mail; the same timeouts GmailGateway uses.
+    private val microsoftHttp =
+        OkHttpClient
+            .Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .build()
+    val msPrefs = MsAccountPreferences(app)
+    val msOAuth =
+        MsOAuthManager(
+            clientId = { msPrefs.clientId.ifBlank { null } },
+            store = KeystoreRefreshTokenStore(app),
+            client = microsoftHttp,
+            log = { repository.recordServiceEvent(it) },
+        )
+    val graphMail = GraphGateway(msOAuth, client = microsoftHttp, log = { repository.recordServiceEvent(it) })
 
-    /** Failover over the connected mailboxes. Gmail is the only member for now (a pass-through). */
+    /**
+     * A Microsoft account is set up when one was connected (its address is remembered) or a token is
+     * stored. A set-up account whose sign-in is gone stays a member, so it is still reported and alerted.
+     */
+    fun microsoftConfigured(): Boolean = msPrefs.accountEmail != null || msOAuth.isAuthorized
+
+    /** The router's members in preference order: Gmail, plus Outlook when set up (first when preferred). */
+    private fun mailMembers(): List<MailTransport> =
+        when {
+            !microsoftConfigured() -> listOf(gmail)
+            msPrefs.preferredProvider == MsAccountPreferences.PROVIDER_GRAPH -> listOf(graphMail, gmail)
+            else -> listOf(gmail, graphMail)
+        }
+
+    /** The one owner of the per-provider reconnect alerts. */
+    val authAlerts =
+        AuthAlertCoordinator(
+            providers = { listOf(gmail, graphMail) },
+            configured = ::mailMembers,
+            isShowing = alerts::isAuthorizationRequiredShowing,
+            show = alerts::showAuthorizationRequired,
+            clear = alerts::clearAuthorizationRequired,
+        )
+
+    /** Failover over the connected mailboxes. With Gmail alone it is a pass-through. */
     val mailRouter =
         MailRouter(
-            members = { listOf(gmail) },
-            onAuthRequired = {
-                routerAlertedProviders += it.providerId
-                alerts.showAuthorizationRequired(it.providerId, it.displayName)
-            },
-            onRecovered = { if (routerAlertedProviders.remove(it)) alerts.clearAuthorizationRequired(it) },
+            members = ::mailMembers,
+            onAuthRequired = { authAlerts.authRequired(it) },
+            onRecovered = { authAlerts.recovered(it) },
             logPossibleDuplicate = { repository.recordServiceEvent(it) },
         )
 
@@ -58,7 +98,26 @@ class AppGraph private constructor(
             MmsGateway(app),
             attachments,
             alerts,
+            onAuthRequired = { authAlerts.authRequired(it) },
         )
+
+    /** Each account's name and whether it can send now: Gmail first, then Outlook when set up. */
+    fun accountStatuses(): List<Pair<String, Boolean>> =
+        buildList {
+            add("Gmail" to gmail.isAvailable)
+            if (microsoftConfigured()) add("Outlook" to graphMail.isAvailable)
+        }
+
+    /**
+     * The status summary every report uses. Gmail alone: exactly what it was before Outlook existed
+     * (the Gmail line follows [mail], which is Gmail behind a pass-through router). With Outlook set
+     * up, the Gmail line is Gmail's own state and Outlook gets its own line.
+     */
+    suspend fun statusSummary(nowMs: Long): String {
+        val accounts = accountStatuses()
+        val gmailAvailable = if (accounts.size == 1) mail.isAvailable else accounts.first().second
+        return repository.buildStatusSummary(gmailAvailable, nowMs, accounts.drop(1))
+    }
 
     companion object {
         @Volatile private var instance: AppGraph? = null

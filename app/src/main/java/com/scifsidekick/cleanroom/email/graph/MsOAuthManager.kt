@@ -2,6 +2,7 @@ package com.scifsidekick.cleanroom.email.graph
 
 import com.scifsidekick.cleanroom.email.MailAuthRequiredException
 import com.scifsidekick.cleanroom.email.MailHttpException
+import com.scifsidekick.cleanroom.util.suspendRunCatching
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
@@ -56,6 +57,8 @@ class MsOAuthManager(
     private val client: OkHttpClient,
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val delayMs: suspend (Long) -> Unit = { kotlinx.coroutines.delay(it) },
+    /** Receives fixed, secret-free breadcrumbs (today only "a rotated refresh token was not saved"). */
+    private val log: suspend (String) -> Unit = {},
 ) {
     private class CachedToken(
         val value: String,
@@ -198,6 +201,7 @@ class MsOAuthManager(
         val json = reply.json
         if (reply.status in 200..299) {
             val access = json?.let { string(it, "access_token") } ?: throw MailHttpException(reply.status, "Microsoft sent an unreadable token response")
+            var rotationNotSaved = false
             synchronized(stateLock) {
                 // Disconnected, or signed in again, while this request was out: this result is stale and
                 // is neither stored nor cached. A newer sign-in's access token is still fine to use.
@@ -210,9 +214,13 @@ class MsOAuthManager(
                         store.write(rotated)
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
+                        rotationNotSaved = true
                     }
                 }
                 cache(access, json)
+            }
+            if (rotationNotSaved) {
+                suspendRunCatching { log("Outlook sign-in: a renewed refresh token could not be saved; the previous one is kept") }
             }
             return access
         }

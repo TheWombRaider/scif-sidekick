@@ -13,6 +13,9 @@ import com.scifsidekick.cleanroom.data.EventLogEntity
 import com.scifsidekick.cleanroom.data.EventType
 import com.scifsidekick.cleanroom.data.ForwardingFilterEntity
 import com.scifsidekick.cleanroom.data.ForwardingStateEntity
+import com.scifsidekick.cleanroom.data.REMOTE_GRAPH_SEEDED
+import com.scifsidekick.cleanroom.email.graph.DeviceCodeResult
+import com.scifsidekick.cleanroom.email.graph.MsAccountPreferences
 import com.scifsidekick.cleanroom.messaging.EmailPayload
 import com.scifsidekick.cleanroom.messaging.IncomingMessage
 import com.scifsidekick.cleanroom.service.ForwardingService
@@ -22,14 +25,19 @@ import com.scifsidekick.cleanroom.service.StatusWidgetProvider
 import com.scifsidekick.cleanroom.util.BackupCrypto
 import com.scifsidekick.cleanroom.util.MessageLogExport
 import com.scifsidekick.cleanroom.util.suspendRunCatching
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.text.DateFormat
 import java.util.Date
 
@@ -298,6 +306,118 @@ class MainViewModel(
         messages.tryEmit("Gmail connected")
     }
 
+    // ----------------------------------------------------------------------------- microsoft
+
+    private var signInJob: Job? = null
+    private var signInProgress: SignInProgress = SignInProgress.None
+    private val microsoftStateFlow = MutableStateFlow<MicrosoftUiState>(MicrosoftUiState.NotConfigured)
+
+    /** The Microsoft (Outlook.com) card. Call [refreshMicrosoftState] when the screen is shown again. */
+    val microsoftState: StateFlow<MicrosoftUiState> = microsoftStateFlow.asStateFlow()
+
+    val preferredProvider: String get() = graph.msPrefs.preferredProvider
+
+    init {
+        refreshMicrosoftState()
+    }
+
+    /** Re-reads the stored account state (a sign-in can be revoked or expire while the app is closed). */
+    fun refreshMicrosoftState() =
+        viewModelScope.launch {
+            val (clientId, email, authorized) =
+                withContext(Dispatchers.IO) { Triple(graph.msPrefs.clientId, graph.msPrefs.accountEmail, graph.msOAuth.isAuthorized) }
+            microsoftStateFlow.value = microsoftStateFor(clientId, email, authorized, signInProgress)
+        }
+
+    private fun setSignInProgress(progress: SignInProgress) {
+        signInProgress = progress
+        refreshMicrosoftState()
+    }
+
+    fun setMicrosoftClientId(id: String) {
+        graph.msPrefs.clientId = id
+        if (signInProgress is SignInProgress.Failed) signInProgress = SignInProgress.None
+        refreshMicrosoftState()
+    }
+
+    fun setPreferredProvider(provider: String) {
+        graph.msPrefs.preferredProvider = provider
+    }
+
+    /**
+     * Device-code sign-in: shows the code, waits for the user to enter it on any device, then
+     * remembers the address, authorizes it for remote control once, and clears any Outlook alert.
+     */
+    fun startMicrosoftSignIn() {
+        if (signInJob?.isActive == true) return
+        signInJob =
+            viewModelScope.launch {
+                setSignInProgress(SignInProgress.Connecting)
+                graph.graphMail.clearSession() // forget a previous account's cached address
+                // With no account connected, any stored ciphertext or Keystore key is leftover (or
+                // corrupt) and would make every sign-in fail to save; start clean.
+                withContext(Dispatchers.IO) { if (!graph.msOAuth.isAuthorized) graph.msOAuth.disconnect() }
+                val code =
+                    try {
+                        graph.msOAuth.startDeviceCode()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (failure: Exception) {
+                        setSignInProgress(SignInProgress.Failed(signInFailureMessage(failure)))
+                        return@launch
+                    }
+                setSignInProgress(
+                    SignInProgress.Waiting(code.userCode, code.verificationUri, System.currentTimeMillis() + code.expiresInSec * 1_000L),
+                )
+                when (val result = graph.msOAuth.awaitDeviceCode(code)) {
+                    is DeviceCodeResult.Connected -> {
+                        setSignInProgress(SignInProgress.Connecting)
+                        val email = graph.graphMail.accountEmail() ?: result.accountEmail
+                        withContext(Dispatchers.IO) { graph.msPrefs.accountEmail = email }
+                        email?.let { graph.repository.seedRemoteControlSender(it, REMOTE_GRAPH_SEEDED) }
+                        graph.authAlerts.recovered(MsAccountPreferences.PROVIDER_GRAPH)
+                        graph.repository.recordEvent(EventType.AUTH, "Outlook connected${email?.let { " ($it)" }.orEmpty()}")
+                        setSignInProgress(SignInProgress.None)
+                        messages.emit("Outlook connected")
+                    }
+                    is DeviceCodeResult.Failed -> setSignInProgress(SignInProgress.Failed(result.reason))
+                    DeviceCodeResult.Cancelled -> setSignInProgress(SignInProgress.None)
+                }
+            }
+    }
+
+    fun cancelMicrosoftSignIn() {
+        signInJob?.cancel()
+        signInJob = null
+        setSignInProgress(SignInProgress.None)
+    }
+
+    /** Signs Outlook out on this phone. Gmail and the forwarding switch are not touched. */
+    fun disconnectMicrosoft() {
+        signInJob?.cancel()
+        signInJob = null
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                graph.msOAuth.disconnect()
+                graph.msPrefs.clearAccount()
+            }
+            graph.graphMail.clearSession()
+            graph.authAlerts.disconnected(MsAccountPreferences.PROVIDER_GRAPH)
+            graph.repository.recordEvent(EventType.AUTH, "Outlook disconnected on this phone")
+            setSignInProgress(SignInProgress.None)
+            messages.emit("Outlook disconnected")
+        }
+    }
+
+    /** Fixed texts only: an exception message from the network layer could carry hosts or ids. */
+    private fun signInFailureMessage(failure: Exception): String =
+        when (failure) {
+            is IOException -> "Could not reach Microsoft. Check the connection and try again."
+            // MsOAuthManager's own failures carry fixed, secret-free texts.
+            is IllegalStateException -> failure.message ?: GENERIC_SIGN_IN_FAILURE
+            else -> GENERIC_SIGN_IN_FAILURE
+        }
+
     // --------------------------------------------------------------------------- diagnostics
 
     /**
@@ -392,7 +512,8 @@ class MainViewModel(
         viewModelScope.launch {
             val message =
                 when (val outcome = suspendRunCatching { SelfTestReceipt.send(getApplication(), graph) }.getOrNull()) {
-                    is SelfTestReceipt.Outcome.Queued -> "Test receipt queued to ${outcome.recipient}. It should arrive within a minute or two."
+                    is SelfTestReceipt.Outcome.Queued ->
+                        "Test receipt queued to ${outcome.recipient} via ${outcome.via}. It should arrive within a minute or two."
                     SelfTestReceipt.Outcome.NotConnected -> "Connect Gmail before sending a test receipt"
                     SelfTestReceipt.Outcome.NotQueued -> "Test receipt was not queued (storage limit reached). See Activity."
                     null -> "Test receipt could not be queued. See Activity."
@@ -456,6 +577,10 @@ class MainViewModel(
         graph.debug.fakeEmailTransport = enabled
         if (enabled) graph.alerts.clearAuthorizationRequired()
         messages.tryEmit("Debug email transport ${if (enabled) "enabled" else "disabled"}")
+    }
+
+    private companion object {
+        const val GENERIC_SIGN_IN_FAILURE = "Microsoft sign-in failed. Try again."
     }
 
     fun injectSynthetic(count: Int) =

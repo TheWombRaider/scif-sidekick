@@ -107,6 +107,12 @@ class AlertNotifier(
         context.getSystemService(NotificationManager::class.java).cancel(authorizationNotificationId(providerId))
     }
 
+    /** Whether [providerId]'s reconnect alert is currently posted (a binder call; see [AuthAlertCoordinator]). */
+    fun isAuthorizationRequiredShowing(providerId: String): Boolean {
+        val id = authorizationNotificationId(providerId)
+        return context.getSystemService(NotificationManager::class.java).activeNotifications.any { it.id == id }
+    }
+
     fun showDeliveryReviewRequired(count: Int) {
         val notification =
             NotificationCompat

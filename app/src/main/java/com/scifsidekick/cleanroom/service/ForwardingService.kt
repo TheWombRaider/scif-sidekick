@@ -49,6 +49,7 @@ class ForwardingService : Service() {
     private var lastPushFailureLogMs = 0L
     private var lastHeartbeatWriteMs = 0L
     private var lastMaintenanceMs = 0L
+    private var lastAuthAlertCheckMs = 0L
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var lastPostedNotificationKey: Triple<ForwardingStateEntity?, Int, Boolean>? = null
 
@@ -66,9 +67,10 @@ class ForwardingService : Service() {
                 if (graph.database
                         .stateDao()
                         .get()
-                        ?.enabled == true && !graph.mail.isAvailable
+                        ?.enabled == true
                 ) {
-                    graph.alerts.showAuthorizationRequired(graph.mail.providerId, graph.mail.displayName)
+                    // One alert per set-up account that is signed out, each under its own name.
+                    graph.authAlerts.serviceStarted()
                 }
                 while (isActive) {
                     val passStartedAtMs = System.currentTimeMillis()
@@ -120,6 +122,12 @@ class ForwardingService : Service() {
                         if (now - lastMaintenanceMs >= MAINTENANCE_INTERVAL_MS) {
                             lastMaintenanceMs = now
                             graph.queueProcessor.recoverTimedOutTelephonyWork()
+                        }
+                        // Clears a reconnect alert that is no longer true (an account reconnected,
+                        // removed, or recovered before a restart). Never raises one.
+                        if (now - lastAuthAlertCheckMs >= REPLY_POLL_INTERVAL_MS) {
+                            lastAuthAlertCheckMs = now
+                            graph.authAlerts.reconcile()
                         }
                         updateNotification(state)
                     } catch (cancelled: CancellationException) {
@@ -233,7 +241,7 @@ class ForwardingService : Service() {
             try {
                 graph.mail.pollReplies(graph.repository.recentProcessedGmailIds())
             } catch (required: com.scifsidekick.cleanroom.email.MailAuthRequiredException) {
-                graph.alerts.showAuthorizationRequired(required.providerId, required.displayName)
+                graph.authAlerts.authRequired(required)
                 graph.repository.recordEvent(
                     EventType.AUTH_REQUIRED,
                     "${graph.mail.displayName} reply polling paused until the user reconnects",
@@ -363,7 +371,7 @@ class ForwardingService : Service() {
                 try {
                     graph.mail.fetchContent(reply)
                 } catch (required: com.scifsidekick.cleanroom.email.MailAuthRequiredException) {
-                    graph.alerts.showAuthorizationRequired(required.providerId, required.displayName)
+                    graph.authAlerts.authRequired(required)
                     graph.repository.recordEvent(
                         EventType.AUTH_REQUIRED,
                         "${graph.mail.displayName} reply content could not be fetched until the account is reconnected",

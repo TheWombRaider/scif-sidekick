@@ -4,9 +4,10 @@ import android.content.Context
 import com.scifsidekick.cleanroom.AppGraph
 import com.scifsidekick.cleanroom.BuildConfig
 import com.scifsidekick.cleanroom.data.EventType
+import com.scifsidekick.cleanroom.email.MailRouter
 
 /**
- * Emails the connected Gmail account a test receipt, through the same path a real `[SCIF:ON]` /
+ * Emails the connected mail account a test receipt, through the same path a real `[SCIF:ON]` /
  * `[SCIF:OFF]` receipt takes: [com.scifsidekick.cleanroom.data.SidekickRepository.enqueueSystemEmail]
  * into send_queue, then [ReceiptDrainWorker]. The Developer screen's connectivity test bypasses the
  * queue and the worker, so it can pass while receipts still fail; this one cannot.
@@ -19,8 +20,10 @@ object SelfTestReceipt {
     const val SUBJECT = "SCIF Sidekick: self-test receipt"
 
     sealed interface Outcome {
+        /** [via] names the account expected to send it ("Gmail", "Outlook"). */
         data class Queued(
             val recipient: String,
+            val via: String,
         ) : Outcome
 
         data object NotConnected : Outcome
@@ -46,7 +49,7 @@ object SelfTestReceipt {
         // Gmail account to read an address from. The UI never passes it.
         val recipient = recipientOverride ?: graph.mail.accountEmail() ?: return Outcome.NotConnected
         val now = System.currentTimeMillis()
-        val summary = graph.repository.buildStatusSummary(graph.mail.isAvailable, now)
+        val summary = graph.statusSummary(now)
         val queued =
             graph.repository.enqueueSystemEmail(
                 recipients = listOf(recipient),
@@ -57,6 +60,7 @@ object SelfTestReceipt {
             ) ?: return Outcome.NotQueued
         graph.repository.recordEvent(EventType.SERVICE, "Queued self-test receipt to $recipient (queue #$queued)")
         ReceiptDrainWorker.enqueue(context)
-        return Outcome.Queued(recipient)
+        val mail = graph.mail
+        return Outcome.Queued(recipient, via = (mail as? MailRouter)?.primaryDisplayName() ?: mail.displayName)
     }
 }

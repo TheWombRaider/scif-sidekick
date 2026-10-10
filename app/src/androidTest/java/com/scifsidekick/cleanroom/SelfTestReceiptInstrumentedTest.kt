@@ -36,7 +36,7 @@ class SelfTestReceiptInstrumentedTest {
     @Test fun queuesThroughTheReceiptPathAndTheWorkerSendsIt() =
         runBlocking {
             val outcome = SelfTestReceipt.send(context, graph, recipientOverride = "owner@example.com")
-            assertEquals(SelfTestReceipt.Outcome.Queued("owner@example.com"), outcome)
+            assertEquals(SelfTestReceipt.Outcome.Queued("owner@example.com", via = "Gmail"), outcome)
             assertEquals(1, graph.database.queueDao().queuedEmailCount())
 
             val worker = TestListenableWorkerBuilder<ReceiptDrainWorker>(context).build()

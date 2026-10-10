@@ -23,8 +23,8 @@ import kotlinx.coroutines.CancellationException
  */
 class MailRouter(
     private val members: () -> List<MailTransport>,
-    private val onAuthRequired: (MailAuthRequiredException) -> Unit = {},
-    private val onRecovered: (providerId: String) -> Unit = {},
+    private val onAuthRequired: suspend (MailAuthRequiredException) -> Unit = {},
+    private val onRecovered: suspend (providerId: String) -> Unit = {},
     private val logPossibleDuplicate: suspend (String) -> Unit = {},
 ) : MailTransport {
     override val providerId: String get() = members().singleOrNull()?.providerId ?: ROUTER_ID
@@ -32,6 +32,15 @@ class MailRouter(
     override val isAvailable: Boolean get() = members().any { it.isAvailable }
 
     private fun usable(): List<MailTransport> = members().filter { it.isAvailable }
+
+    /**
+     * The name of the account a send would try first ("Gmail", "Outlook"): the first available
+     * member, else the first member, else [ROUTER_NAME].
+     */
+    fun primaryDisplayName(): String {
+        val all = members()
+        return (all.firstOrNull { it.isAvailable } ?: all.firstOrNull())?.displayName ?: ROUTER_NAME
+    }
 
     override suspend fun accountEmail(): String? = usable().firstOrNull()?.accountEmail()
 

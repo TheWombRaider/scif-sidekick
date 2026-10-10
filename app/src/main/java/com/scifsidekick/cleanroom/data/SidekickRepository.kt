@@ -235,23 +235,41 @@ class SidekickRepository(
      * address is already listed, it does nothing, so an address removed on purpose stays removed.
      * Installs that already seeded a Status-only owner keep what they have.
      */
-    suspend fun seedRemoteControlOwnerIfEmpty(accountEmail: String) {
+    suspend fun seedRemoteControlOwnerIfEmpty(accountEmail: String) = seedRemoteControlSender(accountEmail, REMOTE_OWNER_SEEDED)
+
+    /**
+     * Authorizes a newly connected mailbox's own address for all four remote commands, once per
+     * install per [flagKey]: after the flag is set it never runs again, so an address the owner
+     * removed stays removed.
+     *
+     * Gmail ([seedRemoteControlOwnerIfEmpty]'s flag) seeds only into an empty list, as it always has.
+     * Any other account ([REMOTE_GRAPH_SEEDED] for Outlook) is added unless it is already listed,
+     * even when the list is not empty: the Gmail owner is usually already there, and a command
+     * mailed from one account to the other is the case this exists for.
+     */
+    suspend fun seedRemoteControlSender(
+        accountEmail: String,
+        flagKey: String,
+    ) {
+        val gmailOwner = flagKey == REMOTE_OWNER_SEEDED
         val canonical = ComposeAuthorization.canonicalAddress(accountEmail) ?: return
         val flags = context.getSharedPreferences(SETUP_FLAGS, Context.MODE_PRIVATE)
-        if (flags.getBoolean(REMOTE_OWNER_SEEDED, false)) return
-        if (RemoteControlCodec.fromJson(currentAppSettings().remoteControlSendersJson).isNotEmpty()) {
-            flags.edit { putBoolean(REMOTE_OWNER_SEEDED, true) }
+        if (flags.getBoolean(flagKey, false)) return
+        if (gmailOwner && RemoteControlCodec.fromJson(currentAppSettings().remoteControlSendersJson).isNotEmpty()) {
+            flags.edit { putBoolean(flagKey, true) }
             return
         }
         db.withTransaction {
             val existing = db.appSettingsDao().get()
             val current = existing ?: AppSettingsEntity()
-            if (RemoteControlCodec.fromJson(current.remoteControlSendersJson).isNotEmpty()) return@withTransaction
+            val senders = RemoteControlCodec.fromJson(current.remoteControlSendersJson)
+            if (gmailOwner && senders.isNotEmpty()) return@withTransaction
+            if (senders.any { ComposeAuthorization.canonicalAddress(it.address) == canonical }) return@withTransaction
             val next =
                 current.copy(
                     remoteControlSendersJson =
                         RemoteControlCodec.toJson(
-                            listOf(
+                            senders +
                                 RemoteControlCodec.Sender(
                                     canonical,
                                     canCompose = true,
@@ -259,14 +277,14 @@ class SidekickRepository(
                                     canDisable = true,
                                     canStatus = true,
                                 ),
-                            ),
                         ),
                     updatedAtMs = System.currentTimeMillis(),
                 )
             if (existing == null) db.appSettingsDao().insertDefault(next) else db.appSettingsDao().update(next)
-            logLocked(EventType.SERVICE, "Remote control: $canonical authorized for Compose, Enable, Disable and Status (first Gmail connection)")
+            val source = if (gmailOwner) "first Gmail connection" else "first Outlook connection"
+            logLocked(EventType.SERVICE, "Remote control: $canonical authorized for Compose, Enable, Disable and Status ($source)")
         }
-        flags.edit { putBoolean(REMOTE_OWNER_SEEDED, true) }
+        flags.edit { putBoolean(flagKey, true) }
     }
 
     // ------------------------------------------------------------------------------- backup
@@ -908,6 +926,7 @@ class SidekickRepository(
     suspend fun buildStatusSummary(
         gmailAvailable: Boolean,
         nowMs: Long = System.currentTimeMillis(),
+        otherAccounts: List<Pair<String, Boolean>> = emptyList(),
     ): String {
         val state = db.stateDao().get()
         val queued = db.queueDao().queuedCount()
@@ -922,6 +941,7 @@ class SidekickRepository(
             appendLine("Forwarding: ${if (state?.enabled == true) "ON" else "OFF"}")
             appendLine("Service last seen: $serviceSeen")
             appendLine("Gmail authorization: ${if (gmailAvailable) "OK" else "NEEDS RECONNECTING"}")
+            accountLines(otherAccounts).forEach { appendLine(it) }
             appendLine("Email circuit breaker: ${if (state?.emailCircuitOpen == true) "OPEN -- sending is paused" else "closed"}")
             appendLine("Queued and waiting to send: $queued")
             appendLine("Email send attempts in the last 24h: $emailsLastDay")
@@ -1218,3 +1238,10 @@ class SidekickRepository(
 }
 
 class QueueCapacityException : Exception("Queue storage limit reached; command left unread for later retry")
+
+/** [SidekickRepository.seedRemoteControlSender]'s once-per-install flag for the Outlook address. */
+const val REMOTE_GRAPH_SEEDED = "remote_graph_seeded"
+
+/** The status summary's line for each account after Gmail, in order. */
+internal fun accountLines(otherAccounts: List<Pair<String, Boolean>>): List<String> =
+    otherAccounts.map { (name, ok) -> "$name authorization: ${if (ok) "OK" else "NEEDS RECONNECTING"}" }
