@@ -82,9 +82,15 @@ class RemoteEnableWorker(
         // the planner's parse is the real one. Anything that isn't a usable command (a near-miss,
         // or a subject carrying two different tags) is consumed rather than left to clog later
         // runs, and the first authorized enable command wins however much other mail is ahead of it.
+        // The app's own mail (the other account's inbox can receive it) is never a command, whatever its subject says.
+        val (own, candidates) =
+            scan.candidates.partition {
+                graph.repository.wasSentByThisApp(it.id, it.rfcMessageId) || it.rfcMessageId.endsWith(OWN_MESSAGE_ID_SUFFIX)
+            }
+        own.forEach { suspendRunCatching { graph.mail.markRead(it.id) } }
         val steps =
             RemoteCommandPlanner.plan(
-                scan.candidates.map { RemoteCommandPlanner.Candidate(it.id, it.subject, it.authenticatedFromAddress) },
+                candidates.map { RemoteCommandPlanner.Candidate(it.id, it.subject, it.authenticatedFromAddress) },
                 settings.remoteControlSendersJson,
             )
         val byId = scan.candidates.associateBy { it.id }
@@ -143,6 +149,7 @@ class RemoteEnableWorker(
 
     companion object {
         private const val UNIQUE_WORK_NAME = "remote_enable_check"
+        private const val OWN_MESSAGE_ID_SUFFIX = "@scif-sidekick.invalid"
 
         fun schedule(context: Context) {
             val request =
