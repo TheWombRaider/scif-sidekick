@@ -36,6 +36,8 @@ object MimeMessageBuilder {
         // Total attachment bytes this provider can carry; over it, every attachment is left out and
         // the body says so. The default is Gmail's budget, so Gmail's output is unchanged.
         maxAttachmentBytes: Long = MAX_SOURCE_ATTACHMENT_BYTES,
+        // Names the provider in the omission disclosure only; the default keeps Gmail's text.
+        providerLabel: String = "Gmail",
     ): BuiltMime {
         val files = attachmentPaths.map(::File).filter { it.isFile }
         val missingAttachmentCount = attachmentPaths.size - files.size
@@ -43,7 +45,7 @@ object MimeMessageBuilder {
         val attach = totalBytes <= maxAttachmentBytes
         val omittedBytes = if (attach) 0 else totalBytes
         val boundary = "sidekick_${UUID.randomUUID()}"
-        val text = buildBody(payload, omittedBytes, missingAttachmentCount)
+        val text = buildBody(payload, omittedBytes, missingAttachmentCount, providerLabel)
 
         val message =
             buildString {
@@ -100,6 +102,7 @@ object MimeMessageBuilder {
         payload: EmailPayload,
         omittedBytes: Long,
         missingAttachmentCount: Int,
+        providerLabel: String,
     ): String =
         buildString {
             append(payload.renderedBody.ifBlank { payload.body.ifBlank { "(No text body)" } })
@@ -109,7 +112,7 @@ object MimeMessageBuilder {
             payload.attachmentNotice?.let { append("\n\nAttachment notice: ").append(it) }
             if (omittedBytes > 0) {
                 append("\n\nAttachment not forwarded: ")
-                append(omittedBytes).append(" bytes exceeds the safe Gmail message-size budget.")
+                append(omittedBytes).append(" bytes exceeds the safe ").append(providerLabel).append(" message-size budget.")
             }
             if (missingAttachmentCount > 0) {
                 append("\n\nAttachment warning: ")

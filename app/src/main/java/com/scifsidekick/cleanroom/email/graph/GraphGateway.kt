@@ -116,7 +116,7 @@ class GraphGateway(
         val fromAddress = profileEmail()
         val built =
             withContext(Dispatchers.IO) {
-                MimeMessageBuilder.build(payload, attachmentPaths, deliveryKey, fromAddress, maxAttachmentBytes = MAX_ATTACHMENT_SOURCE_BYTES)
+                MimeMessageBuilder.build(payload, attachmentPaths, deliveryKey, fromAddress, maxAttachmentBytes = MAX_ATTACHMENT_SOURCE_BYTES, providerLabel = "Outlook")
             }
         // Graph takes MIME as standard base64 in a text/plain body (the byte form keeps OkHttp from
         // adding a charset parameter to the content type).
@@ -218,7 +218,8 @@ class GraphGateway(
      * pending, the paging link was refused, or too many new candidates) keeps the previous cursor,
      * so the next poll reads the same window again, and brings the next sweep forward to within
      * [SWEEP_SOON_MS]. A sweep always moves the cursor: it reads the newest [MAX_POLL_PAGES] pages,
-     * and older mail is out of reach of any poll anyway.
+     * and older mail is out of reach of any poll anyway. A sweep that hit the per-poll candidate
+     * cap runs again on the next poll, skipping the ids already returned.
      */
     override suspend fun pollReplies(knownMessageIds: Set<String>): MailPollResult {
         if (!isAvailable) return MailPollResult(emptyList(), emptyList())
@@ -257,7 +258,8 @@ class GraphGateway(
             if (newest != null && newest > previousCursor) cursorMs = newest
         }
         if (fullSweep) {
-            lastFullSweepMs = now
+            // A sweep that hit the per-poll fetch cap left candidates unread: sweep again next poll.
+            lastFullSweepMs = if (capped) 0L else now
         } else if (incomplete) {
             // Unseen mail may remain in this window: sweep within SWEEP_SOON_MS instead of 6 h.
             lastFullSweepMs = minOf(lastFullSweepMs, now - FULL_SWEEP_INTERVAL_MS + SWEEP_SOON_MS)

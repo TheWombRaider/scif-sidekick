@@ -268,6 +268,15 @@ class GraphGatewayTest {
             assertTrue(createRequest().body!!.length < 3_500_000)
         }
 
+    @Test fun `the omission disclosure names Outlook, not Gmail`() =
+        runBlocking<Unit> {
+            gateway.send(payload(), listOf(attachmentFile(3_000_000)), "key-1", false)
+            val mime = draftText()
+            val body = String(Base64.getMimeDecoder().decode(mime.substringAfterLast("\r\n\r\n").trim()), Charsets.UTF_8)
+            assertTrue(body, body.contains("exceeds the safe Outlook message-size budget."))
+            assertFalse(body, body.contains("Gmail"))
+        }
+
     @Test fun `a message still too large is refused with 413 before anything is sent`() =
         runBlocking<Unit> {
             val huge = payload().copy(renderedBody = "z".repeat(3_000_000))
@@ -559,6 +568,34 @@ class GraphGatewayTest {
             server.nowMs += 5 * 60_000L
             gateway.pollReplies(emptySet())
             assertEquals("receivedDateTime ge ${FakeGraphServer.iso(server.nowMs - 90 * day)}", filterOf(inboxLists().last()))
+        }
+
+    @Test fun `a sweep that hits the candidate cap sweeps again on the next poll, then stops sweeping`() =
+        runBlocking<Unit> {
+            // 50 older candidates, then 100 newer ones an hour later: the first sweep fetches only
+            // the newest 100, and the older 50 lie outside a normal poll's 10-minute overlap.
+            val old = (1..50).map { deliver("Re: [SCIF:+15551234567] old $it") }
+            server.nowMs += 3_600_000L
+            val recent = (1..100).map { deliver("Re: [SCIF:+15551234567] new $it") }
+            val newest = server.nowMs
+            val known = mutableSetOf<String>()
+
+            val first = gateway.pollReplies(known).replies.map { it.id }
+            assertEquals(recent.map { "graph:$it" }.toSet(), first.toSet())
+            known += first
+
+            server.nowMs += 30_000
+            val second = gateway.pollReplies(known).replies.map { it.id }
+            assertEquals("receivedDateTime ge ${FakeGraphServer.iso(server.nowMs - 90 * day)}", filterOf(inboxLists().last()))
+            assertEquals(old.map { "graph:$it" }.toSet(), second.toSet())
+            known += second
+
+            // Every fetched id is now known: the next polls are normal polls, not sweeps.
+            repeat(2) {
+                server.nowMs += 30_000
+                assertTrue(gateway.pollReplies(known).replies.isEmpty())
+                assertEquals("receivedDateTime ge ${FakeGraphServer.iso(newest - 10L * 60_000)}", filterOf(inboxLists().last()))
+            }
         }
 
     @Test fun `timestamps are UTC with Z and no fractional seconds`() =
