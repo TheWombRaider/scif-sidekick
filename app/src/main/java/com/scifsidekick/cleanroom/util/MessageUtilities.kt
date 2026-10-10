@@ -198,7 +198,10 @@ object ComposeAuthorization {
     }
 
     fun canonicalAddress(address: String?): String? {
-        val value = address?.trim()?.lowercase(Locale.US) ?: return null
+        val trimmed = address?.trim() ?: return null
+        // Checked before lowercasing: Locale folding maps U+212A (Kelvin sign) to ASCII 'k'.
+        if (trimmed.any { it.code > 0x7F }) return null
+        val value = trimmed.lowercase(Locale.US)
         if (!value.matches(Regex("[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?"))) return null
         if (value.length > 254 || value.substringBefore('@').length > 64 || ".." in value) return null
         return value
