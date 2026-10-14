@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.scifsidekick.cleanroom.data.AppSettingsEntity
 import com.scifsidekick.cleanroom.messaging.SimSelection
+import com.scifsidekick.cleanroom.service.batteryAlertLevels
 import com.scifsidekick.cleanroom.util.ComposeAuthorization
 import com.scifsidekick.cleanroom.util.PayloadCodec
 import com.scifsidekick.cleanroom.util.RemoteControlCodec
@@ -243,6 +244,8 @@ fun AppSettingsScreenBody(
             }
         }
 
+        BatteryAlertsCard(settings = settings, onChange = onChange)
+
         OutlinedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -376,6 +379,71 @@ private fun IntField(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/**
+ * Low-battery alert emails. They go to the heartbeat recipients, so this card has no address list
+ * of its own. The three numbers are stored as typed (only kept to a sane 0-100 here) and brought
+ * inside their valid ranges where they are used, so a field is never rewritten while it is being
+ * typed into; the preview line shows what will actually fire.
+ */
+@Composable
+private fun BatteryAlertsCard(
+    settings: AppSettingsEntity,
+    onChange: (AppSettingsEntity) -> Unit,
+) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Battery alerts", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = settings.batteryAlertsEnabled,
+                    onCheckedChange = { onChange(settings.copy(batteryAlertsEnabled = it)) },
+                )
+            }
+            Text(
+                "Off by default. Emails the heartbeat recipients when this phone's battery runs low and it " +
+                    "is not charging. A phone with a dead battery forwards nothing and cannot say so, so set " +
+                    "the first alert early enough that there is charge left to send it.\n\n" +
+                    "Each alert includes the full status report. Charging the phone back above the first " +
+                    "level starts the count again.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            IntField(
+                label = "First alert at this battery % (5-50)",
+                value = settings.batteryAlertThresholdPercent,
+                onChange = { onChange(settings.copy(batteryAlertThresholdPercent = it.coerceIn(0, 100))) },
+            )
+            IntField(
+                label = "Then another every this many points lower (1-25)",
+                value = settings.batteryAlertStepPercent,
+                onChange = { onChange(settings.copy(batteryAlertStepPercent = it.coerceIn(0, 100))) },
+            )
+            IntField(
+                label = "Most alerts per discharge (1-10)",
+                value = settings.batteryAlertMaxCount,
+                onChange = { onChange(settings.copy(batteryAlertMaxCount = it.coerceIn(0, 100))) },
+            )
+            val levels =
+                batteryAlertLevels(
+                    settings.batteryAlertThresholdPercent,
+                    settings.batteryAlertStepPercent,
+                    settings.batteryAlertMaxCount,
+                )
+            Text(
+                "Alerts at " + levels.joinToString(", ") { "$it%" },
+                style = MaterialTheme.typography.labelLarge,
+            )
+            if (PayloadCodec.pathsFromJson(settings.heartbeatRecipientsJson).isEmpty()) {
+                Text(
+                    "No heartbeat recipients are set, so no alert can be sent. Add an address under " +
+                        "Heartbeat email above.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
 }
 
 /** Also nested inside the Settings screen's own outer scroll container -- see the doc comment on

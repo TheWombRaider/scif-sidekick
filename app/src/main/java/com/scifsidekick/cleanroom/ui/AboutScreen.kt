@@ -45,6 +45,14 @@ object Changelog {
     val entries =
         listOf(
             ChangelogEntry(
+                "1.30.0",
+                listOf(
+                    "Every status report now ends with the phone's own state: battery and charging, power saving, network, SIM, storage and more.",
+                    "Optional Battery alerts (Settings): emails the heartbeat recipients as the battery runs low while not charging. You set the first level, the spacing and the maximum number of alerts.",
+                ),
+                date = "2026-10-14",
+            ),
+            ChangelogEntry(
                 "1.29.0",
                 listOf(
                     "Optional Outlook.com account (Settings → Email accounts → Microsoft), signed in with a short code on any device.",

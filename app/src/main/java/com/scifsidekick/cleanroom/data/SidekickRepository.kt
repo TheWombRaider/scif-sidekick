@@ -348,6 +348,10 @@ class SidekickRepository(
                         put("heartbeatEnabled", settings.heartbeatEnabled)
                         put("heartbeatIntervalHours", settings.heartbeatIntervalHours)
                         put("heartbeatRecipientsJson", settings.heartbeatRecipientsJson)
+                        put("batteryAlertsEnabled", settings.batteryAlertsEnabled)
+                        put("batteryAlertThresholdPercent", settings.batteryAlertThresholdPercent)
+                        put("batteryAlertStepPercent", settings.batteryAlertStepPercent)
+                        put("batteryAlertMaxCount", settings.batteryAlertMaxCount)
                     // outboundSubscriptionId is deliberately NOT exported: a subscription id is
                     // meaningful only on the phone that issued it, so restoring one onto a
                     // different handset would point at either nothing or, worse, somebody else's
@@ -437,6 +441,17 @@ class SidekickRepository(
                                         .mapNotNull(ComposeAuthorization::canonicalAddress)
                                         .distinct(),
                                 ),
+                            // A backup predating these leaves the current values alone. They send
+                            // to the heartbeat recipients restored above, and the alert counter is
+                            // deliberately not in a backup at all.
+                            batteryAlertsEnabled =
+                                settingsJson.optBoolean("batteryAlertsEnabled", current.batteryAlertsEnabled),
+                            batteryAlertThresholdPercent =
+                                settingsJson.optInt("batteryAlertThresholdPercent", current.batteryAlertThresholdPercent),
+                            batteryAlertStepPercent =
+                                settingsJson.optInt("batteryAlertStepPercent", current.batteryAlertStepPercent),
+                            batteryAlertMaxCount =
+                                settingsJson.optInt("batteryAlertMaxCount", current.batteryAlertMaxCount),
                             updatedAtMs = System.currentTimeMillis(),
                         )
                     if (db.appSettingsDao().get() == null) db.appSettingsDao().insertDefault(next) else db.appSettingsDao().update(next)
@@ -955,6 +970,10 @@ class SidekickRepository(
 
     suspend fun recordHeartbeatEmailSent(nowMs: Long = System.currentTimeMillis()) {
         db.stateDao().updateLastHeartbeatEmail(nowMs)
+    }
+
+    suspend fun recordBatteryAlertsFired(count: Int) {
+        db.stateDao().updateBatteryAlertsFired(count)
     }
 
     /** A short, content-based fingerprint for an outbound reply -- distinct from

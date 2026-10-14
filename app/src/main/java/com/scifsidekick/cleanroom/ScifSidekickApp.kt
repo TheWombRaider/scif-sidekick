@@ -1,6 +1,7 @@
 package com.scifsidekick.cleanroom
 
 import android.app.Application
+import com.scifsidekick.cleanroom.service.BatteryAlertWorker
 import com.scifsidekick.cleanroom.service.GmailWatchRenewalWorker
 import com.scifsidekick.cleanroom.service.HeartbeatEmailWorker
 import com.scifsidekick.cleanroom.service.RemoteEnableWorker
@@ -25,5 +26,6 @@ class ScifSidekickApp : Application() {
         GmailWatchRenewalWorker.schedule(this)
         RemoteEnableWorker.schedule(this)
         HeartbeatEmailWorker.schedule(this)
+        BatteryAlertWorker.schedule(this)
     }
 }

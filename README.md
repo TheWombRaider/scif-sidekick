@@ -8,7 +8,7 @@ Personal phones can't go into a SCIF, which leaves you out of reach for hours at
 
 > **Not an official or approved tool.** SCIF Sidekick is an independent open-source project, not affiliated with or endorsed by any government agency. Follow your organization's rules on personal email and messages at work. Provided as is, with no warranty.
 
-![Version](https://img.shields.io/badge/version-1.29.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.30.0-blue?style=flat-square)
 ![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack_Compose-7F52FF?style=flat-square&logo=kotlin&logoColor=white)
 ![Gmail API](https://img.shields.io/badge/Gmail-API-EA4335?style=flat-square&logo=gmail&logoColor=white)
@@ -44,6 +44,7 @@ Personal phones can't go into a SCIF, which leaves you out of reach for hours at
 | 📖 | **Built-in manual** | Email `[SCIF:HELP]` and get a man-page-style reference of every command and its exact syntax. The same list is on the app's **Commands** screen. |
 | 🔐 | **OTP-safe** | Verification codes can bypass your contact and keyword rules so a bank code never gets filtered out. |
 | 💓 | **Heartbeat** | Optional "still alive" email on a schedule. If it goes quiet, something broke. Recipients are one tap away: Settings lists every address your filters already forward to. |
+| 🔋 | **Battery alerts** | Optional emails while the phone's battery runs low and it is not charging, because a dead phone forwards nothing and cannot say so. You choose the first level, the spacing and the number of alerts. Every status report also shows the phone's battery, power saving, network and SIM state. |
 | ⚡ | **Fast** | Forwarded within seconds of arrival. Email replies are picked up in about 30 seconds, or faster with Gmail push. Outlook is checked every 30 seconds. |
 | 🛡️ | **Built-in limits** | Rolling email and text caps, a premium-rate number block and a circuit breaker so a bug can never flood your inbox or run up your carrier bill. |
 | ⏸️ | **Pause without opening the app** | A Quick Settings tile, a home-screen widget and snooze pause or resume forwarding in one tap. |
@@ -234,6 +235,7 @@ Signed release builds are still supported; the steps are in [RELEASING.md](RELEA
 | A command gets no reply | Remote control is on, the sender is on the list (and ticked for that command), the receiving inbox shows a DMARC pass, and the subject has exactly one command tag. Rejections show in Activity. **Send test receipt** (Settings → Remote control by email) checks that replies can go out. Email `[SCIF:HELP]` for the full syntax. |
 | RCS chats or missed calls are missing | Notification access is on and the Google/Samsung Messages or phone app notifications aren't muted. |
 | You'd like to know if it stops | Turn on the Heartbeat email (Settings), then tap an address under **Add from your filters** to send it there. |
+| You'd like a warning before the battery dies | Set a Heartbeat recipient, then turn on **Battery alerts** (Settings) and pick the level of the first alert. Alerts go to the heartbeat recipients. |
 
 ---
 

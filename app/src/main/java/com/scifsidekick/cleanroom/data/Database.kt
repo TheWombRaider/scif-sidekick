@@ -123,6 +123,11 @@ data class ForwardingStateEntity(
     // restored backup should not be able to convince the app it already sent today's heartbeat.
     // 0 means none has ever been queued, which makes the first eligible check send one.
     val lastHeartbeatEmailMs: Long = 0L,
+    // How many low-battery alerts have gone out since the battery was last above the threshold.
+    // State, not a setting, for the same reason as lastHeartbeatEmailMs: a restored backup must not
+    // be able to convince the app it already warned about a battery that is dying now. 0 means the
+    // next crossing of the threshold sends the first alert.
+    val batteryAlertsFired: Int = 0,
 ) {
     companion object {
         const val SINGLETON_ID = 1
@@ -396,6 +401,16 @@ data class AppSettingsEntity(
     // at all, as a single kill switch covering all four commands at once.
     val remoteControlEnabled: Boolean = true,
     val remoteControlSendersJson: String = "[]",
+    // Low-battery alert emails, sent to the heartbeat recipients (there is no second list). Off by
+    // default, like the heartbeat: it needs somewhere to send to. A dead phone forwards nothing and
+    // cannot say so, so the first alert wants to come early: threshold is the level of the first
+    // alert, each further one comes `step` points lower, up to `maxCount` alerts in all. The values
+    // are stored as typed and kept inside BatteryAlertLimits where they are used (see
+    // batteryAlertLevels), so a field is never rewritten under the cursor mid-edit.
+    val batteryAlertsEnabled: Boolean = false,
+    val batteryAlertThresholdPercent: Int = 20,
+    val batteryAlertStepPercent: Int = 5,
+    val batteryAlertMaxCount: Int = 3,
     val updatedAtMs: Long = System.currentTimeMillis(),
 ) {
     companion object {
@@ -484,6 +499,9 @@ interface StateDao {
     // master switch made by the very email command it might be reporting on.
     @Query("UPDATE forwarding_state SET lastHeartbeatEmailMs = :nowMs WHERE id = 1")
     suspend fun updateLastHeartbeatEmail(nowMs: Long)
+
+    @Query("UPDATE forwarding_state SET batteryAlertsFired = :count WHERE id = 1")
+    suspend fun updateBatteryAlertsFired(count: Int)
 
     // Same dedicated single-column shape as updateHeartbeat -- GmailWatchRenewalWorker writes
     // this once a day (or on manual "Test Push Setup"), independent of anything else in the row.
@@ -861,7 +879,7 @@ interface TelephonyPartResultDao {
         ForwardingFilterEntity::class,
         AppSettingsEntity::class,
     ],
-    version = 18,
+    version = 19,
     exportSchema = true,
 )
 abstract class SidekickDatabase : RoomDatabase() {
@@ -924,6 +942,7 @@ abstract class SidekickDatabase : RoomDatabase() {
                         MIGRATION_15_16,
                         MIGRATION_16_17,
                         MIGRATION_17_18,
+                        MIGRATION_18_19,
                     )
             return builder.build()
         }
@@ -1321,6 +1340,20 @@ abstract class SidekickDatabase : RoomDatabase() {
                             db.execSQL("UPDATE app_settings SET remoteControlSendersJson = ? WHERE id = 1", arrayOf<Any>(mergedJson))
                         }
                     }
+                }
+            }
+
+        // Adds: the low-battery alert settings on app_settings, off by default so upgrading sends
+        // nothing new to anybody, plus the "how many have gone out" counter on forwarding_state.
+        // The counter is state rather than a setting, so it stays out of backup/restore.
+        val MIGRATION_18_19 =
+            object : Migration(18, 19) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertsEnabled INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertThresholdPercent INTEGER NOT NULL DEFAULT 20")
+                    db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertStepPercent INTEGER NOT NULL DEFAULT 5")
+                    db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertMaxCount INTEGER NOT NULL DEFAULT 3")
+                    db.execSQL("ALTER TABLE forwarding_state ADD COLUMN batteryAlertsFired INTEGER NOT NULL DEFAULT 0")
                 }
             }
     }

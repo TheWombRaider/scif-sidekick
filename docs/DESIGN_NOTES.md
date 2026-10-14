@@ -9,7 +9,7 @@ SCIF Sidekick is a clean-room Android/Kotlin rebuild that relays live SMS events
 
 Installing it cannot reuse state from an earlier SCIF Sidekick build.
 
-This build is release **1.29.0**. Release history, including the reasoning behind each change, lives in [CHANGELOG.md](../CHANGELOG.md).
+This build is release **1.30.0**. Release history, including the reasoning behind each change, lives in [CHANGELOG.md](../CHANGELOG.md).
 
 See [Filters](#filters) and [Remote control by email](#remote-control-by-email) below. See [docs/QA_AUDIT.md](QA_AUDIT.md) for the 1.1.0 audit and [docs/TEST_PLAN.md](TEST_PLAN.md) for device checks.
 

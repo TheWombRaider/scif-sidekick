@@ -200,3 +200,25 @@ Everything Outlook-specific was built and tested against `FakeGraphServer`, a si
 - `/send` is asynchronous on Microsoft's side. If its response is lost and the router's follow-up check runs very early, the item may still read `isDraft == true` or be missing from Sent Items, so a fallback send could duplicate the forward. The event log says "possible duplicate" when this path is taken.
 - Gmail's ARC exemption (DESIGN_NOTES, "Only the first `Authentication-Results` header counts") assumes Gmail never echoes `)` or `;` from a sender-controlled domain into the ARC comment's domain fields. It matters only for `From` domains without DMARC.
 - A draft left by an ambiguous send that never went out stays in the Outlook Drafts folder; it is never sent.
+
+## 19. Phone health and battery alerts (manual)
+
+The decision rule and the report formatting are covered by JVM tests (`BatteryAlertPolicyTest`, `PhoneHealthFormatTest`) and the 18 to 19 migration by `Migration18To19InstrumentedTest` (emulator only). Everything below needs the real phone. Record each result and the date here.
+
+**Phone block**
+
+1. Email `[SCIF:STATUS]` from an authorized address. The reply ends with lines for Battery, Power saver, Doze, Battery optimization, Background restricted, Network, Airplane mode, SIM, Free storage and Last reboot. Check each against the phone: battery percent and charging state, Battery optimization "exempt" if you granted it, Network matching how the phone is connected.
+2. Turn on airplane mode, then back off, and request another status. The Airplane mode line follows. Turn on Battery saver and confirm Power saver reads ON.
+3. Confirm no line names a Wi-Fi network, a place, a carrier or any device identifier.
+4. Revoke SMS permission in Android settings, request a status (use the heartbeat or a status mail sent while the permission is still needed elsewhere), and confirm a "Missing permissions" line appears. Grant it again.
+
+**Battery alerts**
+
+5. Settings → Battery alerts: with no heartbeat recipient set, a red warning says no alert can be sent. Add a heartbeat recipient and the warning goes away. The "Alerts at ..." line matches the three numbers; typing a value outside a range (for example 99 as the first level) changes the preview to the nearest valid value without rewriting the field you are typing in.
+6. Set the first level a few points below the current battery (for example 3 below), step 1, maximum 3, switch Battery alerts on, and unplug the phone. Within about 15 to 30 minutes of crossing the first level, one email "SCIF Sidekick battery low - N%" arrives, saying "Battery alert 1 of 3", with the full status block. Another arrives one point lower, then a third, and no fourth.
+7. Plug the phone in below the first level: no further alert while it charges. Unplug it at the same low level: no repeat of an alert already sent. Charge above the first level and let it fall again: the count restarts at alert 1.
+8. With forwarding switched off in the app, repeat step 6 and confirm the alerts still arrive.
+9. Back up the settings and restore them: the four battery alert values come back. The "already alerted" count is not in the backup, so after a restore the next crossing sends alert 1.
+10. Put the phone in airplane mode while it crosses a level and take it out again: the alert goes out when the network returns, naming the level then.
+
+**Known limit**: alerts can arrive later than the crossing when Android defers background work. Record how late they are on this phone.

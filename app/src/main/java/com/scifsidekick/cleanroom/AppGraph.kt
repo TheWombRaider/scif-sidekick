@@ -23,6 +23,8 @@ import com.scifsidekick.cleanroom.service.AlertNotifier
 import com.scifsidekick.cleanroom.service.AuthAlertCoordinator
 import com.scifsidekick.cleanroom.service.QueueProcessor
 import com.scifsidekick.cleanroom.service.RollingRateLimiter
+import com.scifsidekick.cleanroom.service.formatPhoneHealth
+import com.scifsidekick.cleanroom.service.readPhoneSnapshot
 import com.scifsidekick.cleanroom.util.AttachmentStore
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -134,6 +136,7 @@ class AppGraph private constructor(
     /**
      * The status summary every report uses. Gmail alone: unchanged from before Outlook. With Outlook
      * set up, Gmail's line is its own state ("not connected" when not a member) and Outlook gets one.
+     * The phone's own state (battery, power saving, network, SIM) follows the app's lines.
      */
     suspend fun statusSummary(nowMs: Long): String {
         val accounts = accountStatuses()
@@ -145,7 +148,8 @@ class AppGraph private constructor(
                 others.isEmpty() -> mail.isAvailable
                 else -> gmailEntry.second
             }
-        return repository.buildStatusSummary(gmailAvailable, nowMs, others, gmailIsMember = gmailEntry != null)
+        val appLines = repository.buildStatusSummary(gmailAvailable, nowMs, others, gmailIsMember = gmailEntry != null)
+        return appLines + "\n" + formatPhoneHealth(readPhoneSnapshot(app))
     }
 
     companion object {
