@@ -48,7 +48,7 @@ object Changelog {
                 "1.30.0",
                 listOf(
                     "Every status report now ends with the phone's own state: battery and charging, power saving, network, SIM, storage and more.",
-                    "Battery alerts, part of the Heartbeat settings and on by default: emails the heartbeat addresses as the battery runs low while not charging. You set the first level, the spacing and the maximum number of alerts.",
+                    "Battery alerts, part of the Heartbeat settings (on for new installs, and after an update only if the heartbeat was on): emails the heartbeat addresses as the battery runs low while not charging. You set the first level, the spacing and the maximum number of alerts.",
                 ),
                 date = "2026-10-14",
             ),

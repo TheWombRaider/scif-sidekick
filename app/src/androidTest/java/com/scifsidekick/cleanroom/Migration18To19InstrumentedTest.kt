@@ -14,8 +14,7 @@ class Migration18To19InstrumentedTest {
     @get:Rule
     val helper = MigrationTestHelper(InstrumentationRegistry.getInstrumentation(), SidekickDatabase::class.java)
 
-    @Test
-    fun migrationTurnsBatteryAlertsOnWithTheDocumentedDefaults() {
+    private fun insertV18Row(heartbeatEnabled: Int) {
         helper.createDatabase(DB_NAME, 18).apply {
             execSQL(
                 "INSERT INTO app_settings(id, appLockEnabled, fontScaleKey, duplicateSuppressionEnabled, " +
@@ -27,11 +26,16 @@ class Migration18To19InstrumentedTest {
                     "heartbeatIntervalHours, heartbeatRecipientsJson, remoteStatusViaEmailEnabled, " +
                     "authorizedRemoteStatusSendersJson, outboundSubscriptionId, remoteControlEnabled, " +
                     "remoteControlSendersJson, updatedAtMs) " +
-                    "VALUES(1, 0, 'default', 1, 1, 0, 0, 1, 0, '[]', 30, 90, 0, '', '', 0, '[]', 0, '[]', 1, 1, " +
-                    "12, '[\"owner@example.com\"]', 0, '[]', -1, 1, '[]', 1000)",
+                    "VALUES(1, 0, 'default', 1, 1, 0, 0, 1, 0, '[]', 30, 90, 0, '', '', 0, '[]', 0, '[]', 1, " +
+                    "$heartbeatEnabled, 12, '[\"owner@example.com\"]', 0, '[]', -1, 1, '[]', 1000)",
             )
             close()
         }
+    }
+
+    @Test
+    fun anInstallWithTheHeartbeatOnGetsBatteryAlertsOnWithTheDocumentedDefaults() {
+        insertV18Row(heartbeatEnabled = 1)
 
         helper.runMigrationsAndValidate(DB_NAME, 19, true, SidekickDatabase.MIGRATION_18_19).apply {
             query(
@@ -40,8 +44,7 @@ class Migration18To19InstrumentedTest {
                     "FROM app_settings WHERE id = 1",
             ).use { cursor ->
                 cursor.moveToFirst()
-                // On, like a fresh install. With no heartbeat recipient nothing is sent; this
-                // install has one, so it starts getting the warnings on update.
+                // This install already chose to have status emailed to its recipients.
                 assertEquals(1, cursor.getInt(0))
                 assertEquals(20, cursor.getInt(1))
                 assertEquals(5, cursor.getInt(2))
@@ -54,6 +57,20 @@ class Migration18To19InstrumentedTest {
             // missing, even with no forwarding_state row to read.
             query("SELECT batteryAlertsFired FROM forwarding_state WHERE id = 1").use { cursor ->
                 if (cursor.moveToFirst()) assertEquals(0, cursor.getInt(0))
+            }
+            close()
+        }
+    }
+
+    @Test
+    fun anInstallWithTheHeartbeatOffUpgradesWithBatteryAlertsOff() {
+        insertV18Row(heartbeatEnabled = 0)
+
+        helper.runMigrationsAndValidate(DB_NAME, 19, true, SidekickDatabase.MIGRATION_18_19).apply {
+            query("SELECT batteryAlertsEnabled FROM app_settings WHERE id = 1").use { cursor ->
+                cursor.moveToFirst()
+                // Nobody here agreed to be emailed, and an update must not change that.
+                assertEquals(0, cursor.getInt(0))
             }
             close()
         }

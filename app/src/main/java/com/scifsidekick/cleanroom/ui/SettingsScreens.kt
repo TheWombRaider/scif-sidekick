@@ -401,7 +401,7 @@ private fun BatteryAlertsSection(
         )
     }
     Text(
-        "On by default. Emails the Send to addresses above when this phone's battery runs low and it " +
+        "On for new installs. Emails the Send to addresses above when this phone's battery runs low and it " +
             "is not charging. A phone with a dead battery forwards nothing and cannot say so, so set " +
             "the first alert early enough that there is charge left to send it.\n\n" +
             "Each alert includes the full status report. Charging the phone back above the first " +

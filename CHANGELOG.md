@@ -4,7 +4,7 @@ Short version. The full notes, with the reasoning behind each change, are in [do
 
 ## 1.30.0
 - Every status report (heartbeat, `[SCIF:STATUS]` reply, command receipt, self-test) now ends with the phone's own state: battery level and charging, power saver, Doze, battery optimization, background restriction, network, airplane mode, SIM, free storage, time since reboot, and any missing permission.
-- New **Battery alerts**, part of the Heartbeat email settings and on by default. When the battery falls to the first level and the phone is not charging, the heartbeat addresses get an email, then another every few points lower, up to a maximum you set (defaults: first at 20%, every 5 points, at most 3 alerts). Charging back above the first level starts the count again. Nothing is sent until a Send to address exists; adding one starts the alerts with no further setup, and they work even when the scheduled heartbeat is off.
+- New **Battery alerts**, part of the Heartbeat email settings, on by default on a fresh install and on after an update only if the heartbeat was already on. When the battery falls to the first level and the phone is not charging, the heartbeat addresses get an email, then another every few points lower, up to a maximum you set (defaults: first at 20%, every 5 points, at most 3 alerts). Charging back above the first level starts the count again. Nothing is sent until a Send to address exists; adding one starts the alerts with no further setup, and they work even when the scheduled heartbeat is off.
 
 ## 1.29.0
 - New optional **Outlook.com account** under Settings → Email accounts → Microsoft. You register a free app with Microsoft once, paste its ID, and sign in with a short code on any device. See Outlook Setup in the README.

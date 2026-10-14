@@ -14,7 +14,7 @@ The phone lives somewhere the owner is not. If its battery dies, forwarding stop
 - Alerts work whether forwarding is on or off.
 - The Phone block and alerts never include message content, Wi-Fi names, location, cell tower, carrier or device identifiers.
 - No new permission and no new Gradle dependency.
-- Alerts are on by default, including on upgrade. With no heartbeat recipient nothing is sent; adding one starts the alerts with no further setup. With no recipient, behavior is identical to 1.29.0 apart from the extra Phone block.
+- Alerts are on by default on a fresh install. An upgrade follows the heartbeat switch (on only where the heartbeat is already enabled), so nobody who never agreed to be emailed starts receiving alerts. With no heartbeat recipient nothing is sent; adding one starts the alerts with no further setup. With no recipient, behavior is identical to 1.29.0 apart from the extra Phone block.
 
 ## Non-goals
 
@@ -61,7 +61,7 @@ Permissions already in the manifest cover all of this (`ACCESS_NETWORK_STATE`, `
 
 | Column | Default | Valid range (enforced where used, see below) |
 |---|---|---|
-| `batteryAlertsEnabled` | 1 | |
+| `batteryAlertsEnabled` | 1 on a fresh install; on upgrade, the value of `heartbeatEnabled` | |
 | `batteryAlertThresholdPercent` | 20 | 5 to 50 |
 | `batteryAlertStepPercent` | 5 | 1 to 25 |
 | `batteryAlertMaxCount` | 3 | 1 to 10 |

@@ -219,6 +219,7 @@ The decision rule and the report formatting are covered by JVM tests (`BatteryAl
 7. Plug the phone in below the first level: no further alert while it charges. Unplug it at the same low level: no repeat of an alert already sent. Charge above the first level and let it fall again: the count restarts at alert 1.
 8. With forwarding switched off in the app, repeat step 6 and confirm the alerts still arrive.
 9. Back up the settings and restore them: the four battery alert values come back. The "already alerted" count is not in the backup, so after a restore the next crossing sends alert 1.
-10. Put the phone in airplane mode while it crosses a level and take it out again: the alert goes out when the network returns, naming the level then.
+10. Updating an existing install: if the heartbeat was already on, the Battery alerts switch is on after the update; if the heartbeat was off, the switch is off and nothing new is emailed until you turn it on.
+11. Put the phone in airplane mode while it crosses a level and take it out again: the alert goes out when the network returns, naming the level then.
 
 **Known limit**: alerts can arrive later than the crossing when Android defers background work. Record how late they are on this phone.

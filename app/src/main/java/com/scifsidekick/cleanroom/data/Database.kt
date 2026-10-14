@@ -1345,19 +1345,21 @@ abstract class SidekickDatabase : RoomDatabase() {
                 }
             }
 
-        // Adds: the low-battery alert settings on app_settings, on by default like a fresh install.
-        // That sends nothing to anybody who has no heartbeat recipient, and an upgrading install
-        // that does have one gets the warnings the moment it updates. Plus the "how many have gone
-        // out" counter on forwarding_state, which is state rather than a setting and so stays out
-        // of backup/restore.
+        // Adds: the low-battery alert settings on app_settings, plus the "how many have gone out"
+        // counter on forwarding_state, which is state rather than a setting and so stays out of
+        // backup/restore. A fresh install gets alerts on (see AppSettingsEntity), but an upgrade
+        // must not start emailing people who never agreed to it: the switch starts on only where
+        // the heartbeat is already enabled, since that install has already chosen to have status
+        // emailed to its recipients. Everyone else upgrades with it off and can switch it on.
         val MIGRATION_18_19 =
             object : Migration(18, 19) {
                 override fun migrate(db: SupportSQLiteDatabase) {
-                    db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertsEnabled INTEGER NOT NULL DEFAULT 1")
+                    db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertsEnabled INTEGER NOT NULL DEFAULT 0")
                     db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertThresholdPercent INTEGER NOT NULL DEFAULT 20")
                     db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertStepPercent INTEGER NOT NULL DEFAULT 5")
                     db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertMaxCount INTEGER NOT NULL DEFAULT 3")
                     db.execSQL("ALTER TABLE forwarding_state ADD COLUMN batteryAlertsFired INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("UPDATE app_settings SET batteryAlertsEnabled = heartbeatEnabled")
                 }
             }
     }
