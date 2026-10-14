@@ -177,7 +177,8 @@ fun AppSettingsScreenBody(
                         "is a notification on this phone, which is no use when the phone is locked away -- and if " +
                         "Gmail authorization is what expired, no error email can reach you either, because " +
                         "sending email is the broken part. A heartbeat that stops showing up still tells you.\n\n" +
-                        "Pick a preset below or type any custom number of hours -- both write the same value.",
+                        "Pick a preset below or type any custom number of hours -- both write the same value. " +
+                        "The addresses under Send to also receive the battery alerts further down.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 val heartbeatHours = listOf(6, 12, 24, 48)
@@ -241,10 +242,9 @@ fun AppSettingsScreenBody(
                         }
                     }
                 }
+                BatteryAlertsSection(settings = settings, onChange = onChange)
             }
         }
-
-        BatteryAlertsCard(settings = settings, onChange = onChange)
 
         OutlinedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -382,67 +382,64 @@ private fun IntField(
 }
 
 /**
- * Low-battery alert emails. They go to the heartbeat recipients, so this card has no address list
- * of its own. The three numbers are stored as typed (only kept to a sane 0-100 here) and brought
- * inside their valid ranges where they are used, so a field is never rewritten while it is being
- * typed into; the preview line shows what will actually fire.
+ * Low-battery alert emails, shown inside the heartbeat card because they are part of it: same
+ * "Send to" addresses, same status report. The three numbers are stored as typed (only kept to a
+ * sane 0-100 here) and brought inside their valid ranges where they are used, so a field is never
+ * rewritten while it is being typed into; the preview line shows what will actually fire.
  */
 @Composable
-private fun BatteryAlertsCard(
+private fun BatteryAlertsSection(
     settings: AppSettingsEntity,
     onChange: (AppSettingsEntity) -> Unit,
 ) {
-    OutlinedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Battery alerts", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Switch(
-                    checked = settings.batteryAlertsEnabled,
-                    onCheckedChange = { onChange(settings.copy(batteryAlertsEnabled = it)) },
-                )
-            }
-            Text(
-                "Off by default. Emails the heartbeat recipients when this phone's battery runs low and it " +
-                    "is not charging. A phone with a dead battery forwards nothing and cannot say so, so set " +
-                    "the first alert early enough that there is charge left to send it.\n\n" +
-                    "Each alert includes the full status report. Charging the phone back above the first " +
-                    "level starts the count again.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            IntField(
-                label = "First alert at this battery % (5-50)",
-                value = settings.batteryAlertThresholdPercent,
-                onChange = { onChange(settings.copy(batteryAlertThresholdPercent = it.coerceIn(0, 100))) },
-            )
-            IntField(
-                label = "Then another every this many points lower (1-25)",
-                value = settings.batteryAlertStepPercent,
-                onChange = { onChange(settings.copy(batteryAlertStepPercent = it.coerceIn(0, 100))) },
-            )
-            IntField(
-                label = "Most alerts per discharge (1-10)",
-                value = settings.batteryAlertMaxCount,
-                onChange = { onChange(settings.copy(batteryAlertMaxCount = it.coerceIn(0, 100))) },
-            )
-            val levels =
-                batteryAlertLevels(
-                    settings.batteryAlertThresholdPercent,
-                    settings.batteryAlertStepPercent,
-                    settings.batteryAlertMaxCount,
-                )
-            Text(
-                "Alerts at " + levels.joinToString(", ") { "$it%" },
-                style = MaterialTheme.typography.labelLarge,
-            )
-            if (PayloadCodec.pathsFromJson(settings.heartbeatRecipientsJson).isEmpty()) {
-                Text(
-                    "No heartbeat recipients are set, so no alert can be sent. Add an address under " +
-                        "Heartbeat email above.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        }
+    Spacer(Modifier.height(6.dp))
+    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text("Battery alerts", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Switch(
+            checked = settings.batteryAlertsEnabled,
+            onCheckedChange = { onChange(settings.copy(batteryAlertsEnabled = it)) },
+        )
+    }
+    Text(
+        "On by default. Emails the Send to addresses above when this phone's battery runs low and it " +
+            "is not charging. A phone with a dead battery forwards nothing and cannot say so, so set " +
+            "the first alert early enough that there is charge left to send it.\n\n" +
+            "Each alert includes the full status report. Charging the phone back above the first " +
+            "level starts the count again. This works even if the scheduled heartbeat above is off.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    IntField(
+        label = "First alert at this battery % (5-50)",
+        value = settings.batteryAlertThresholdPercent,
+        onChange = { onChange(settings.copy(batteryAlertThresholdPercent = it.coerceIn(0, 100))) },
+    )
+    IntField(
+        label = "Then another every this many points lower (1-25)",
+        value = settings.batteryAlertStepPercent,
+        onChange = { onChange(settings.copy(batteryAlertStepPercent = it.coerceIn(0, 100))) },
+    )
+    IntField(
+        label = "Most alerts per discharge (1-10)",
+        value = settings.batteryAlertMaxCount,
+        onChange = { onChange(settings.copy(batteryAlertMaxCount = it.coerceIn(0, 100))) },
+    )
+    val levels =
+        batteryAlertLevels(
+            settings.batteryAlertThresholdPercent,
+            settings.batteryAlertStepPercent,
+            settings.batteryAlertMaxCount,
+        )
+    Text(
+        "Alerts at " + levels.joinToString(", ") { "$it%" },
+        style = MaterialTheme.typography.labelLarge,
+    )
+    if (settings.batteryAlertsEnabled && PayloadCodec.pathsFromJson(settings.heartbeatRecipientsJson).isEmpty()) {
+        Text(
+            "No Send to address is set, so no alert can be sent yet. Add one above and alerts start " +
+                "reaching it automatically.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
     }
 }
 

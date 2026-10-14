@@ -14,13 +14,13 @@ The phone lives somewhere the owner is not. If its battery dies, forwarding stop
 - Alerts work whether forwarding is on or off.
 - The Phone block and alerts never include message content, Wi-Fi names, location, cell tower, carrier or device identifiers.
 - No new permission and no new Gradle dependency.
-- With alerts off (the default), behavior is identical to 1.29.0 apart from the extra Phone block.
+- Alerts are on by default, including on upgrade. With no heartbeat recipient nothing is sent; adding one starts the alerts with no further setup. With no recipient, behavior is identical to 1.29.0 apart from the extra Phone block.
 
 ## Non-goals
 
 - No real-time battery broadcast receiver. Detection is a 15-minute WorkManager check.
 - No alert channels other than email (no SMS, no on-device notification for these).
-- No separate recipient list: alerts go to the heartbeat recipients.
+- No separate recipient list or job: alerts are part of the heartbeat and go to its recipients.
 - No alerts for non-battery conditions (network, storage, permissions). Those only appear in the Phone block.
 - No change to the queue, retry, rate-limit or circuit-breaker behavior.
 
@@ -61,7 +61,7 @@ Permissions already in the manifest cover all of this (`ACCESS_NETWORK_STATE`, `
 
 | Column | Default | Valid range (enforced where used, see below) |
 |---|---|---|
-| `batteryAlertsEnabled` | 0 | |
+| `batteryAlertsEnabled` | 1 | |
 | `batteryAlertThresholdPercent` | 20 | 5 to 50 |
 | `batteryAlertStepPercent` | 5 | 1 to 25 |
 | `batteryAlertMaxCount` | 3 | 1 to 10 |
@@ -81,10 +81,9 @@ The settings travel with the other `app_settings` fields in backup and restore; 
 
 With the defaults: alerts at 20%, 15%, 10%. A drop from 22% to 9% between checks sends one alert (for the 10% level) and sets the count to 3.
 
-**Worker**: new `BatteryAlertWorker`, a `CoroutineWorker` on a 15-minute periodic request with the network-connected constraint, scheduled in `ScifSidekickApp` beside `HeartbeatEmailWorker`. It is not gated on forwarding being on. Each run:
+**Job**: not a worker of its own. `HeartbeatEmailWorker` (15-minute periodic request, network-connected constraint) runs `BatteryAlertCheck` on every tick, after the scheduled heartbeat. The two switches are independent. Neither is gated on forwarding being on. Each check:
 
-1. Read settings. Return if alerts are disabled.
-2. Read heartbeat recipients (`heartbeatRecipientsJson`). Return if empty.
+1. The worker reads settings and the heartbeat recipients (`heartbeatRecipientsJson`) and returns if there are none; the check returns if alerts are disabled.
 3. Read battery level and charging state from the sticky battery intent. Return if unreadable.
 4. Call `evaluateBatteryAlert`. If the decision is a reset or a no-op, persist the new count when it changed and return.
 5. On send, queue a system email (`enqueueSystemEmail`) to the recipients. Subject: `SCIF Sidekick battery low - <level>%`. Body: a short sentence naming the level and alert number, then the full status summary (which contains the Phone block).
@@ -97,13 +96,13 @@ The network constraint is deliberate: marking an alert as sent while offline wou
 
 ### 3. Settings UI
 
-A new "Battery alerts" `OutlinedCard` in `SettingsScreens.kt`, directly under the Heartbeat email card, built from the same components (switch row, `IntField`, `bodySmall` explanation). It contains:
+A "Battery alerts" section at the bottom of the existing Heartbeat email card in `SettingsScreens.kt`, below the Send to addresses it shares, built from the same components (switch row, `IntField`, `bodySmall` explanation). It contains:
 
 - Switch: enable battery alerts.
 - Three number fields: threshold (5 to 50), step (1 to 25), maximum alerts (1 to 10), each clamped on change.
 - A live preview line, for example `Alerts at 20%, 15%, 10%`.
 - Explanatory text stating that alerts go to the heartbeat recipients and that a dead phone cannot report its own death, so the first alert should fire early.
-- A visible warning when no heartbeat recipients are set, since alerts then cannot send.
+- A visible warning when alerts are on and no Send to address is set, saying alerts start reaching an address as soon as one is added.
 
 ## Testing
 

@@ -15,7 +15,7 @@ class Migration18To19InstrumentedTest {
     val helper = MigrationTestHelper(InstrumentationRegistry.getInstrumentation(), SidekickDatabase::class.java)
 
     @Test
-    fun migrationLeavesBatteryAlertsOffWithTheDocumentedDefaults() {
+    fun migrationTurnsBatteryAlertsOnWithTheDocumentedDefaults() {
         helper.createDatabase(DB_NAME, 18).apply {
             execSQL(
                 "INSERT INTO app_settings(id, appLockEnabled, fontScaleKey, duplicateSuppressionEnabled, " +
@@ -40,8 +40,9 @@ class Migration18To19InstrumentedTest {
                     "FROM app_settings WHERE id = 1",
             ).use { cursor ->
                 cursor.moveToFirst()
-                // Off, so upgrading sends nothing new to anybody.
-                assertEquals(0, cursor.getInt(0))
+                // On, like a fresh install. With no heartbeat recipient nothing is sent; this
+                // install has one, so it starts getting the warnings on update.
+                assertEquals(1, cursor.getInt(0))
                 assertEquals(20, cursor.getInt(1))
                 assertEquals(5, cursor.getInt(2))
                 assertEquals(3, cursor.getInt(3))

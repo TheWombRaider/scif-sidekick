@@ -401,13 +401,15 @@ data class AppSettingsEntity(
     // at all, as a single kill switch covering all four commands at once.
     val remoteControlEnabled: Boolean = true,
     val remoteControlSendersJson: String = "[]",
-    // Low-battery alert emails, sent to the heartbeat recipients (there is no second list). Off by
-    // default, like the heartbeat: it needs somewhere to send to. A dead phone forwards nothing and
-    // cannot say so, so the first alert wants to come early: threshold is the level of the first
-    // alert, each further one comes `step` points lower, up to `maxCount` alerts in all. The values
-    // are stored as typed and kept inside BatteryAlertLimits where they are used (see
-    // batteryAlertLevels), so a field is never rewritten under the cursor mid-edit.
-    val batteryAlertsEnabled: Boolean = false,
+    // Low-battery alert emails, sent to the heartbeat recipients (there is no second list). On by
+    // default: it grants nobody anything and widens no trust boundary, and with no recipient yet it
+    // sends nothing, so the moment a heartbeat recipient is added the alerts reach it without a
+    // second setup step. A dead phone forwards nothing and cannot say so, so the first alert wants
+    // to come early: threshold is the level of the first alert, each further one comes `step`
+    // points lower, up to `maxCount` alerts in all. The values are stored as typed and kept inside
+    // BatteryAlertLimits where they are used (see batteryAlertLevels), so a field is never
+    // rewritten under the cursor mid-edit.
+    val batteryAlertsEnabled: Boolean = true,
     val batteryAlertThresholdPercent: Int = 20,
     val batteryAlertStepPercent: Int = 5,
     val batteryAlertMaxCount: Int = 3,
@@ -1343,13 +1345,15 @@ abstract class SidekickDatabase : RoomDatabase() {
                 }
             }
 
-        // Adds: the low-battery alert settings on app_settings, off by default so upgrading sends
-        // nothing new to anybody, plus the "how many have gone out" counter on forwarding_state.
-        // The counter is state rather than a setting, so it stays out of backup/restore.
+        // Adds: the low-battery alert settings on app_settings, on by default like a fresh install.
+        // That sends nothing to anybody who has no heartbeat recipient, and an upgrading install
+        // that does have one gets the warnings the moment it updates. Plus the "how many have gone
+        // out" counter on forwarding_state, which is state rather than a setting and so stays out
+        // of backup/restore.
         val MIGRATION_18_19 =
             object : Migration(18, 19) {
                 override fun migrate(db: SupportSQLiteDatabase) {
-                    db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertsEnabled INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertsEnabled INTEGER NOT NULL DEFAULT 1")
                     db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertThresholdPercent INTEGER NOT NULL DEFAULT 20")
                     db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertStepPercent INTEGER NOT NULL DEFAULT 5")
                     db.execSQL("ALTER TABLE app_settings ADD COLUMN batteryAlertMaxCount INTEGER NOT NULL DEFAULT 3")

@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.scifsidekick.cleanroom.AppGraph
 import com.scifsidekick.cleanroom.BuildConfig
+import com.scifsidekick.cleanroom.data.AppSettingsEntity
 import com.scifsidekick.cleanroom.data.QueueChannel
 import com.scifsidekick.cleanroom.util.PayloadCodec
 import com.scifsidekick.cleanroom.util.suspendRunCatching
@@ -35,6 +36,11 @@ import java.util.concurrent.TimeUnit
  * actually elapsed. It deliberately does *not* require forwarding to be on: "forwarding is off"
  * is itself a thing worth learning from a distance, and a heartbeat that goes quiet whenever the
  * master switch flips would be indistinguishable from the app dying.
+ *
+ * The same tick also runs [BatteryAlertCheck]. A low-battery warning is a heartbeat that comes
+ * early: same recipients, same status report, same schedule, so there is one job and one list of
+ * addresses to keep rather than two. The two switches are independent -- the heartbeat can be off
+ * while battery alerts are on, and the other way round.
  */
 class HeartbeatEmailWorker(
     context: Context,
@@ -43,16 +49,25 @@ class HeartbeatEmailWorker(
     override suspend fun doWork(): Result {
         val graph = AppGraph.from(applicationContext)
         val settings = graph.repository.currentAppSettings()
-        if (!settings.heartbeatEnabled) return Result.success()
         val recipients = PayloadCodec.pathsFromJson(settings.heartbeatRecipientsJson)
         if (recipients.isEmpty()) return Result.success()
 
+        if (settings.heartbeatEnabled) sendScheduledHeartbeat(graph, settings, recipients)
+        BatteryAlertCheck.run(applicationContext, graph, settings, recipients)
+        return Result.success()
+    }
+
+    private suspend fun sendScheduledHeartbeat(
+        graph: AppGraph,
+        settings: AppSettingsEntity,
+        recipients: List<String>,
+    ) {
         val now = System.currentTimeMillis()
         val intervalMs = settings.heartbeatIntervalHours.coerceAtLeast(1) * 60L * 60_000L
         val lastSent = graph.database.stateDao().get()?.lastHeartbeatEmailMs ?: 0L
         // 0 means one has never been queued, so the first eligible check sends immediately rather
         // than waiting a full interval to prove the feature works at all.
-        if (lastSent > 0L && now - lastSent < intervalMs) return Result.success()
+        if (lastSent > 0L && now - lastSent < intervalMs) return
 
         // Not gated on gmail.isAvailable: an unauthorized Gmail is precisely the failure this
         // exists to surface, and the queued mail will go out the moment authorization returns
@@ -73,7 +88,7 @@ class HeartbeatEmailWorker(
                         "whose cause is that it can no longer send email.",
                 reason = "scheduled heartbeat email",
                 nowMs = now,
-            ) ?: return Result.success()
+            ) ?: return
 
         graph.repository.recordHeartbeatEmailSent(now)
         graph.repository.recordServiceEvent("Queued scheduled heartbeat email (queue #$queueId)")
@@ -92,7 +107,6 @@ class HeartbeatEmailWorker(
                         (failure.message ?: failure.javaClass.simpleName).take(300),
                 )
             }
-        return Result.success()
     }
 
     companion object {
