@@ -263,6 +263,7 @@ Uninstalling deletes everything the app stored on the phone (queue, activity, se
 - [docs/DESIGN_NOTES.md](docs/DESIGN_NOTES.md): safety invariants and the reasoning behind the design
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the pieces fit together, including the mail transports and the failover router
 - [docs/TEST_PLAN.md](docs/TEST_PLAN.md): device checks, including the first real-account Outlook checks (§18)
+- [docs/README_STYLE_GUIDE.md](docs/README_STYLE_GUIDE.md): how this README is written and laid out
 - [docs/QA_AUDIT.md](docs/QA_AUDIT.md): the 1.1.0 audit
 - [docs/superpowers/](docs/superpowers/): design specs and implementation plans for larger changes, including the [Outlook and failover design](docs/superpowers/specs/2026-10-09-microsoft-graph-and-failover-design.md)
 

@@ -30,4 +30,4 @@ Do not put real phone numbers, email addresses, message text, tokens or screensh
 
 ## Pull requests
 
-Keep them small and focused. Update the README, `docs/` and `CHANGELOG.md` when behavior changes. By contributing you agree your work is released under the [0BSD license](LICENSE).
+Keep them small and focused. Update the README, `docs/` and `CHANGELOG.md` when behavior changes, and follow [docs/README_STYLE_GUIDE.md](docs/README_STYLE_GUIDE.md) when editing the README. By contributing you agree your work is released under the [0BSD license](LICENSE).
